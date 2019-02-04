@@ -10,7 +10,7 @@ Created on Thu Jan 31 10:12:51 2019
 import os
 
 ### Provide the path here
-os.chdir('C:\\Users\\akash\\Desktop\\GWU\\capstone\\data')
+os.chdir('C:\\Users\\akash\\Desktop\\GWU\\6501_Capstone\\data')
 
 
 ### Basic Packages
@@ -49,10 +49,11 @@ df1_flu17 = pd.read_excel('flushots_2017.xls',sheet_name='StatisticsICD10.rpt')
 df1 = pd.concat([df1_flu16,df1_flu17])
 df1.rename(columns={'Account Number':'AcctNum'}, inplace=True)
 
-### Null Removal
+### Null Removal & Trimming
 df2 = df1.copy(deep = False)
 df2 = df2.dropna(how = 'all')
 df2 = df2.drop(['Unnamed: 4','Unnamed: 5'], axis =1)
+df2['AcctNum'] = df2['AcctNum'].str.split('-').str[0]
 
 ### Null Check (Quant Vars)
 plt.figure(1)
@@ -69,16 +70,21 @@ df3.dropna(inplace=True)
 
 ###Additional Datasources
 df1_fluDx = pd.read_excel('DiagnosisReport_20162017.xls',sheet_name='PT1005_pat_diagnosis_list.rpt')
-df1_fluDx.rename(columns={'Patient account':'AcctNum'}, inplace=True)
+df1_fluDx.rename(columns={'Patient account':'AcctNum','Sex':'Gender'}, inplace=True)
 # ^^ Rename all column ( maybe )
 df2_fluDx = df1_fluDx.copy(deep = False)
 df2_fluDx = df2_fluDx.dropna(how = 'all')
+df2_fluDx['AcctNum'] = df2_fluDx['AcctNum'].str.split('-').str[0]
 df3_fluDx = df2_fluDx.copy(deep = False)
 df3_fluDx.replace('',np.nan,inplace=True)
 df3_fluDx.dropna(inplace=True)
 df3_fluDx['FluShotReceived'] = df3_fluDx.notnull().all(1).astype(int)
 
-df4 = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'left')
+### Merging Datsets
+df4_left = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'left')
+df4_right = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'right')
+df4_inner = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'inner')
+df4_outer = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'outer')
 
 ########################################
 # DATA TIDYING
@@ -87,7 +93,7 @@ df4 = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'le
 df4['FluShotReceived'].replace(np.nan,'0',inplace=True)
 df4_cols = list(df4)
 df5 = df4.copy(deep = False)
-df5 = df5.drop(['AcctNum','DOB_x','Chart','DOB_y','Sex','Zip','ICD Date'], axis = 1)
+df5 = df5.drop(['AcctNum','DOB_x','Chart','DOB_y','Zip','ICD Date'], axis = 1)
 
 ################################################
 # ENCODING
