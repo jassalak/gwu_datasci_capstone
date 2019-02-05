@@ -44,8 +44,8 @@ from sklearn.neighbors import KNeighborsClassifier
 
 ########################################
 ### Data Load
-df1_flu16 = pd.read_excel('flushots_2016.xls',sheet_name='StatisticsICD10.rpt')
-df1_flu17 = pd.read_excel('flushots_2017.xls',sheet_name='StatisticsICD10.rpt')
+df1_flu16 = pd.read_excel('flushots_2016_edited1.xls',sheet_name='StatisticsICD10.rpt')
+df1_flu17 = pd.read_excel('flushots_2017_edited1.xls',sheet_name='StatisticsICD10.rpt')
 df1 = pd.concat([df1_flu16,df1_flu17])
 df1.rename(columns={'Account Number':'AcctNum'}, inplace=True)
 
@@ -62,16 +62,16 @@ df2_missing = df2_missing[df2_missing >0]
 df2_missing.sort_values(inplace=True)
 plt.title("count of nulls")
 if len(df2_missing) > 0:df2_missing.plot.bar()
+# ^^ Need to remove HEADERS!!!!
 
 ### Null Management
 df3 = df2.copy(deep = False)
-df3.replace('',np.nan,inplace=True)
-df3.dropna(inplace=True)
+#df3.replace('',np.nan,inplace=True)
+#df3.dropna(inplace=True)
 
 ###Additional Datasources
 df1_fluDx = pd.read_excel('DiagnosisReport_20162017.xls',sheet_name='PT1005_pat_diagnosis_list.rpt')
-df1_fluDx.rename(columns={'Patient account':'AcctNum','Sex':'Gender'}, inplace=True)
-# ^^ Rename all column ( maybe )
+df1_fluDx.rename(columns={'Patient account':'AcctNum','DOB':'Bday'}, inplace=True)
 df2_fluDx = df1_fluDx.copy(deep = False)
 df2_fluDx = df2_fluDx.dropna(how = 'all')
 df2_fluDx['AcctNum'] = df2_fluDx['AcctNum'].str.split('-').str[0]
@@ -90,10 +90,11 @@ df4_outer = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how
 # DATA TIDYING
 
 ### Create More Managable DataFrame
+df4 = df4_left.copy(deep = False)
 df4['FluShotReceived'].replace(np.nan,'0',inplace=True)
 df4_cols = list(df4)
 df5 = df4.copy(deep = False)
-df5 = df5.drop(['AcctNum','DOB_x','Chart','DOB_y','Zip','ICD Date'], axis = 1)
+df5 = df5.drop(['AcctNum','DOB','Chart','Bday','Zip','ICD Date'], axis = 1)
 
 ################################################
 # ENCODING
@@ -112,7 +113,7 @@ df5_quant = [f for f in df5.columns if df5.dtypes[f] != 'object']
 #EDA & FEATURE SELECTION
 
 ### DV Density
-y = df2['SalePrice']
+y = df5['FluShotReceived']
 plt.figure(2); plt.title('Normal')
 sns.distplot(y, kde=False, fit=st.norm)
 
