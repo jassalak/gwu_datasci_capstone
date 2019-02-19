@@ -54,6 +54,7 @@ df2 = df1.copy(deep = False)
 df2 = df2.dropna(how = 'all')
 df2 = df2.drop(['Unnamed: 4','Unnamed: 5'], axis =1)
 df2['AcctNum'] = df2['AcctNum'].str.split('-').str[0]
+df2 = df2[pd.to_numeric(df2['AcctNum'], errors='coerce').notnull()]
 
 ### Null Check (Quant Vars)
 plt.figure(1)
@@ -62,12 +63,12 @@ df2_missing = df2_missing[df2_missing >0]
 df2_missing.sort_values(inplace=True)
 plt.title("count of nulls")
 if len(df2_missing) > 0:df2_missing.plot.bar()
-# ^^ Need to remove HEADERS!!!!
 
 ### Null Management
 df3 = df2.copy(deep = False)
 #df3.replace('',np.nan,inplace=True)
 #df3.dropna(inplace=True)
+
 
 ###Additional Datasources
 df1_fluDx = pd.read_excel('DiagnosisReport_20162017.xls',sheet_name='PT1005_pat_diagnosis_list.rpt')
@@ -78,7 +79,9 @@ df2_fluDx['AcctNum'] = df2_fluDx['AcctNum'].str.split('-').str[0]
 df3_fluDx = df2_fluDx.copy(deep = False)
 df3_fluDx.replace('',np.nan,inplace=True)
 df3_fluDx.dropna(inplace=True)
-df3_fluDx['FluShotReceived'] = df3_fluDx.notnull().all(1).astype(int)
+df3_fluDx['FluDx_YES'] = df3_fluDx.notnull().all(1).astype(int)
+df3_fluDx = df3_fluDx[pd.to_numeric(df3_fluDx['AcctNum'], errors='coerce').notnull()]
+
 
 ### Merging Datsets
 df4_left = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'left')
@@ -86,48 +89,56 @@ df4_right = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how
 df4_inner = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'inner')
 df4_outer = pd.merge(df3,df3_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', how = 'outer')
 
+# ^6 left shoudl be 51429 rows
 ########################################
 # DATA TIDYING
 
 ### Create More Managable DataFrame
 df4 = df4_left.copy(deep = False)
-df4['FluShotReceived'].replace(np.nan,'0',inplace=True)
+df4['FluDx_YES'].replace(np.nan,'0',inplace=True)
+df4['FluDx_YES'] = pd.to_numeric(df4['FluDx_YES'])
+
+df4['Gender_Female'] = df4['Gender'].map({'F':1,'M':0})
+df4['Gender_Male'] = df4['Gender'].map({'M':1,'F':0})
+
+## Convert DOB to Age! Remove over 100??
+
+df4['Age_Bin']= pd.cut(df4['Age'],[0,18,35,55,80,105], labels = ['Child','YoungAdult','MiddleAge','Old','Oldest'] )
+
 df4_cols = list(df4)
 df5 = df4.copy(deep = False)
-df5 = df5.drop(['AcctNum','DOB','Chart','Bday','Zip','ICD Date'], axis = 1)
+df5 = df5.drop(['AcctNum','DOB','Chart','Bday','Zip','ICD Date','Gender','Sex'], axis = 1)
 
 ################################################
-# ENCODING
-### Encoding Qualitative (Dummy Variables)
-
-#df5 = pd.get_dummies(df5)
-# ^^ Need to fix.  Bin Ages!!
-
-### Determines quantitative and qualitative columns
-df5_qual = [f for f in df5.columns if df5.dtypes[f] == 'object']
-df5_quant = [f for f in df5.columns if df5.dtypes[f] != 'object']
-
 
 ################################################
 
 #EDA & FEATURE SELECTION
 
+### Determines quantitative and qualitative columns
+print(df5.dtypes)
+df5_qual = [f for f in df5.columns if df5.dtypes[f] == 'object']
+df5_quant = [f for f in df5.columns if df5.dtypes[f] != 'object']
+
 ### DV Density
-y = df5['FluShotReceived']
 plt.figure(2); plt.title('Normal')
-sns.distplot(y, kde=False, fit=st.norm)
+sns.distplot(df5['FluDx_YES'], kde=False, fit=st.norm)
 
 ### Correlation Matrix
 #### Quantiative
 plt.figure(3)
-#corr = df2[df2_quant+['SalePrice']].corr()
-corr = df2[df2_quant].corr()
-sns.heatmap(corr)
+#corr = df5[df5_quant+['FluShotReceived']].corr()
+sns.heatmap(df5[df5_quant].corr())
 
-plt.figure(4)
-f = pd.melt(df2, value_vars=df2_quant)
-g = sns.FacetGrid(f, col="variable",  col_wrap=2, sharex=False, sharey=False)
-g = g.map(sns.distplot, "value")
+#plt.figure(4)
+#f = pd.melt(df5, value_vars=df5_quant)
+#g = sns.FacetGrid(f, col="variable",  col_wrap=2, sharex=False, sharey=False)
+#g = g.map(sns.distplot, "value")
+
+
+df5_corr = df5.corr()
+df5_corr.sort_values(["FluShotReceived"], ascending = False, inplace = True)
+print(df5_corr.FluShotReceived)
 
 ################################################
 
