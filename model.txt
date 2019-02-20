@@ -1,0 +1,2 @@
+model1 --> 20190131. Uses initial data sent by LMG.
+model2 --> 20190220.  Uses expansive data sent by LMG.
