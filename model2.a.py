@@ -24,8 +24,10 @@ import seaborn as sns
 import scipy.stats as st
 from pandas.plotting import scatter_matrix
 
+from sklearn import metrics
 from sklearn.neighbors import KNeighborsClassifier
-#from statsmodels.discrete.discrete_model import Logit
+
+from statsmodels.discrete.discrete_model import Logit
 
 ################################################################################
 
@@ -68,7 +70,8 @@ print(df2.info())
 
 
 df2_qual = df2.select_dtypes(include=['object']).copy()
-df2_quant = df2.select_dtypes(include=['int64']).copy()
+df2_quant = df2.select_dtypes(include=['int64','uint8']).copy()
+
 df2_feats = list(df2)
 print(df2.groupby('FLUDX_YES').mean() )
 
@@ -76,8 +79,26 @@ print(df2.isnull().sum())                                                       
 ### Dropping Rows
 df2.dropna(inplace=True)
 
+### Value Counts
 for f in df2.columns:
     print(df2[f].value_counts())
+
+### Combining Variables into Other
+series = pd.value_counts(df2['PT STATE'])
+mask = (series/series.sum() * 100)                                              # To replace df['column'] use np.where I.e
+mask = (series/series.sum() * 100).lt(1)                                        # lt(%); where % is the cut off
+df2['PT STATE'] = np.where(df2['PT STATE'].isin(series[mask].index),'Other',df2['PT STATE'])
+
+series = pd.value_counts(df2['PCP SPECIALTY'])
+mask = (series/series.sum() * 100)                                              # To replace df['column'] use np.where I.e
+mask = (series/series.sum() * 100).lt(16)                                        # lt(%); where % is the cut off
+df2['PCP SPECIALTY'] = np.where(df2['PCP SPECIALTY'].isin(series[mask].index),'Other',df2['PCP SPECIALTY'])
+
+new = series[~mask]
+new['Other'] = series[mask].sum()
+series.index = np.where(series.index.isin(series[mask].index),'Other',series.index)
+
+df2 = pd.get_dummies(df2,columns = ['PT STATE','PCP SPECIALTY'], prefix = ['State','Speciality'])
 
 
 print(df2.dtypes)
@@ -88,7 +109,7 @@ plt.figure(2); plt.title('Normal')
 sns.distplot(df2['FLUDX_YES'], kde=False, fit=st.norm)
 
 ################################################################################
-### Logistic Regression
+### Logistic Regression (sklearn)
 df3 = df2_quant.copy(deep = False)
 
 # prepare X and y
@@ -98,8 +119,8 @@ y = df3[['FLUDX_YES']]
 X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
 
 logit = LogisticRegression()
-result = logit.fit(Y_train,X_train)
-print(result.summary())
+result = logit.fit(X_train,Y_train)
+#print(result.summary2())
 
 logit_yhat = logit.predict(X_test)
 logit_prob = logit.predict_proba(X_test)
@@ -108,23 +129,58 @@ logit_threshold = logit_ci90
 logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
 
 
-glm0_score =  round(metrics.accuracy_score(glm_Y, glm0_Yhat)*100,4)
-print('\n Score glm0:', metrics.accuracy_score(glm_Y, glm0_Yhat) )
-#print(' \n Intercept glm0: ',glm0.intercept_)
-glm0_coef = pd.DataFrame(glm0.coef_[0], glm_X.columns, columns=['glm1_Coefficients,14'])
-glm0_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(glm_Y, glm0_Yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix glm0: \n',glm0_confusion_matrix)
+logit_score =  round(metrics.accuracy_score(Y_test, logit_yhat)*100,2)
+print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
+#print(' \n Intercept logit: ',logit.intercept_)
+logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
+logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
 
 ### Evaluation Metrics
-tn = glm0_confusion_matrix.iloc[0,0]
-fp = glm0_confusion_matrix.iloc[0,1]
-fn = glm0_confusion_matrix.iloc[1,0]
-tp = glm0_confusion_matrix.iloc[1,1]
+tn = logit_confusion_matrix.iloc[0,0]
+fp = logit_confusion_matrix.iloc[0,1]
+fn = logit_confusion_matrix.iloc[1,0]
+tp = logit_confusion_matrix.iloc[1,1]
 sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
 specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+################################################################################
+### Logistic Regression (statsmodel)
+
+traincols =['YEAR','State_MD','State_Other','State_VA','State_WV','Speciality_Family Practice','Speciality_Internal Medicine','Speciality_Other']
+y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
+x = df2[traincols].astype(float)
+logit = Logit(y,x)
+result = logit.fit()
+print(result.summary())
+
+df2 = df2.reset_index()
+X_train, X_test, Y_train, Y_test =tts(df2[traincols], df2['FLUDX_YES'], test_size = 0.3, random_state=5026)
+logit = Logit(Y_train, X_train)
+result = logit.fit()
+print(result.summary2())
+
+probs = result.predict(df2[traincols].astype(float))
+perc = probs.sort_values(ascending =True)
+perc = pd.DataFrame(perc.reset_index(drop=True))
+perc.columns = ['probs']
+perc['scale_weight'] = perc['probs']*1000
+perc['cumulative_perc'] = 0
+perc['bin'] = 0
+
+for row in perc:
+    perc.cumulative_perc = (perc.index+1)/len(perc)
+    perc.bin = np.floor(perc.cumulative_perc*100)*1
+
+min_bin = perc.groupby('bin', axis = 0, as_index = False).min()
+min_bin.columns = ['bin','probs','min_scaleweight','cumulative_perc']
+max_bin = perc.groupby('bin', axis = 0, as_index = False).max()
+max_bin.columns = ['bin','probs','max_scaleweight','cumulative_perc']
+bin_table = min_bin
+bin_table['max_scaleweight'] = max_bin['max_scaleweight']
 
 
 
+################################################################################
 ### Extra code
 
 def corry(x, y, **kwargs):
@@ -163,7 +219,7 @@ df2_missing.sort_values(inplace=True)
 plt.title("count of nulls")
 if len(df2_missing) > 0:df2_missing.plot.bar()
 
-
+#https://stackoverflow.com/questions/47418299/python-combining-low-frequency-factors-category-counts
 
 
 
