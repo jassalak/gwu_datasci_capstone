@@ -94,11 +94,17 @@ mask = (series/series.sum() * 100)                                              
 mask = (series/series.sum() * 100).lt(16)                                        # lt(%); where % is the cut off
 df2['PCP SPECIALTY'] = np.where(df2['PCP SPECIALTY'].isin(series[mask].index),'Other',df2['PCP SPECIALTY'])
 
+series = pd.value_counts(df2['PT INS'])
+mask = (series/series.sum() * 100)
+mask = (series/series.sum() * 100).lt(1)                                        # lt(%); where % is the cut off
+df2['PT INS'] = np.where(df2['PT INS'].isin(series[mask].index),'Other',df2['PT INS'])
+
+
 new = series[~mask]
 new['Other'] = series[mask].sum()
 series.index = np.where(series.index.isin(series[mask].index),'Other',series.index)
 
-df2 = pd.get_dummies(df2,columns = ['PT STATE','PCP SPECIALTY'], prefix = ['State','Speciality'])
+df2 = pd.get_dummies(df2,columns = ['PT GENDER','PT STATE','PCP SPECIALTY','PT INS'], prefix = ['Gndr','State','Spclty','Ins'])
 
 
 print(df2.dtypes)
