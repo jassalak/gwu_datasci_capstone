@@ -51,7 +51,7 @@ df1_flu1617['AcctNum'] = pd.to_numeric(df1_flu1617['AcctNum'])
 now = DT.datetime(2019,12,31) #now = pd.Timestamp(DT.datetime.now())
 df1_flu1617['Pt DOB'] = pd.to_datetime(df1_flu1617['Pt DOB'], format='%m%d%y')    # 1
 df1_flu1617['Pt DOB'] = df1_flu1617['Pt DOB'].where(df1_flu1617['Pt DOB'] < now, df1_flu1617['Pt DOB'] -  np.timedelta64(100, 'Y'))   # 2
-df1_flu1617['PtAge'] = (now - df1_flu1617['Pt DOB']).astype('<m8[Y]')    # 3
+df1_flu1617['Pt_Age'] = (now - df1_flu1617['Pt DOB']).astype('<m8[Y]')    # 3
 
 df1_fluDx = pd.read_excel('DiagnosisReport_20162017.xlsx',sheet_name='PT1005_pat_diagnosis_list.rpt')
 df2_fluDx = df1_fluDx.copy(deep = True)
@@ -68,7 +68,7 @@ df1 = pd.merge(df1_flu1617,df2_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', h
 df1['FluDx_YES'].replace(np.nan,'0',inplace=True)
 df1['FluDx_YES'] = pd.to_numeric(df1['FluDx_YES'])
 df1.columns = df1.columns.str.upper()
-df1.to_excel("df1.xlsx")
+#df1.to_excel("df1.xlsx")
 df1 = pd.read_excel('df1.xlsx',sheet_name='Sheet1')
 ################################################################################
 
@@ -165,8 +165,11 @@ specificity = tn / (tn + fp) *100                                               
 ################################################################################
 ### Logistic Regression (statsmodel)
 
-traincols =
-traincols =['YEAR','State_MD','State_Other','State_VA','State_WV','Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other']
+#traincols =
+traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
+            'State_MD','State_Other','State_VA','State_WV',
+            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED']
 y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
 x = df2[traincols].astype(float)
 logit = Logit(y,x)
