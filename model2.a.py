@@ -24,6 +24,10 @@ import seaborn as sns
 import scipy.stats as st
 from pandas.plotting import scatter_matrix
 
+from datetime import datetime
+from datetime import date
+import datetime as DT
+
 from sklearn import metrics
 from sklearn.neighbors import KNeighborsClassifier
 
@@ -44,6 +48,10 @@ df1_flu1617 = pd.concat([df1_flu16,df1_flu17], sort = False)
 df1_flu1617 = df1_flu1617[pd.to_numeric(df1_flu1617['AcctNum'], errors='coerce').notnull()]
 df1_flu1617['AcctNum'] = pd.to_numeric(df1_flu1617['AcctNum'])
 
+now = DT.datetime(2019,12,31) #now = pd.Timestamp(DT.datetime.now())
+df1_flu1617['Pt DOB'] = pd.to_datetime(df1_flu1617['Pt DOB'], format='%m%d%y')    # 1
+df1_flu1617['Pt DOB'] = df1_flu1617['Pt DOB'].where(df1_flu1617['Pt DOB'] < now, df1_flu1617['Pt DOB'] -  np.timedelta64(100, 'Y'))   # 2
+df1_flu1617['PtAge'] = (now - df1_flu1617['Pt DOB']).astype('<m8[Y]')    # 3
 
 df1_fluDx = pd.read_excel('DiagnosisReport_20162017.xlsx',sheet_name='PT1005_pat_diagnosis_list.rpt')
 df2_fluDx = df1_fluDx.copy(deep = True)
@@ -60,7 +68,7 @@ df1 = pd.merge(df1_flu1617,df2_fluDx,left_on = 'AcctNum',right_on = 'AcctNum', h
 df1['FluDx_YES'].replace(np.nan,'0',inplace=True)
 df1['FluDx_YES'] = pd.to_numeric(df1['FluDx_YES'])
 df1.columns = df1.columns.str.upper()
-#df1.to_excel("df1.xlsx")
+df1.to_excel("df1.xlsx")
 df1 = pd.read_excel('df1.xlsx',sheet_name='Sheet1')
 ################################################################################
 
@@ -99,12 +107,17 @@ mask = (series/series.sum() * 100)
 mask = (series/series.sum() * 100).lt(1)                                        # lt(%); where % is the cut off
 df2['PT INS'] = np.where(df2['PT INS'].isin(series[mask].index),'Other',df2['PT INS'])
 
+df2['PT RACE'].replace('_R','Other',inplace=True)                               # DOES NOT WORK WELL, DUPE OF 210 and 202
+series = pd.value_counts(df2['PT RACE'])
+mask = (series/series.sum() * 100)
+mask = (series/series.sum() * 100).lt(5)                                        # lt(%); where % is the cut off
+df2['PT RACE'] = np.where(df2['PT RACE'].isin(series[mask].index),'Other',df2['PT RACE'])
 
 new = series[~mask]
 new['Other'] = series[mask].sum()
 series.index = np.where(series.index.isin(series[mask].index),'Other',series.index)
 
-df2 = pd.get_dummies(df2,columns = ['PT GENDER','PT STATE','PCP SPECIALTY','PT INS'], prefix = ['Gndr','State','Spclty','Ins'])
+df2 = pd.get_dummies(df2,columns = ['YEAR','PT GENDER','PT STATE','PCP SPECIALTY','PT INS'], prefix = ['Yr','Gndr','State','Spclty','Ins'])
 
 
 print(df2.dtypes)
@@ -152,14 +165,15 @@ specificity = tn / (tn + fp) *100                                               
 ################################################################################
 ### Logistic Regression (statsmodel)
 
-traincols =['YEAR','State_MD','State_Other','State_VA','State_WV','Speciality_Family Practice','Speciality_Internal Medicine','Speciality_Other']
+traincols =
+traincols =['YEAR','State_MD','State_Other','State_VA','State_WV','Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other']
 y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
 x = df2[traincols].astype(float)
 logit = Logit(y,x)
 result = logit.fit()
 print(result.summary())
 
-df2 = df2.reset_index()
+#df2 = df2.reset_index()
 X_train, X_test, Y_train, Y_test =tts(df2[traincols], df2['FLUDX_YES'], test_size = 0.3, random_state=5026)
 logit = Logit(Y_train, X_train)
 result = logit.fit()
