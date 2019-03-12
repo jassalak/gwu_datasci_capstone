@@ -29,8 +29,9 @@ from datetime import date
 import datetime as DT
 
 from sklearn import metrics
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import confusion_matrix
 
+from sklearn.neighbors import KNeighborsClassifier
 from statsmodels.discrete.discrete_model import Logit
 
 ################################################################################
@@ -73,15 +74,9 @@ df1 = pd.read_excel('df1.xlsx',sheet_name='Sheet1')
 ################################################################################
 
 df2 = df1.copy(deep = False)
-df2 = df1.drop(['ACCTNUM','PCP','LMG PRACTICE','DOS','DIAGNOSIS CODES','PLACE OF SERVICE','CPT', 'CPT DESCRIPTION','PT ADDRESS 1','PT ADDRESS 2', 'PT ZIP', 'PT DOB'], axis=1)
+df2 = df1.drop(['ACCTNUM','PCP','LMG PRACTICE','DOS','DIAGNOSIS CODES','PLACE OF SERVICE', 'CPT DESCRIPTION','PT ADDRESS 1','PT ADDRESS 2', 'PT ZIP', 'PT DOB'], axis=1)
 print(df2.info())
 
-
-df2_qual = df2.select_dtypes(include=['object']).copy()
-df2_quant = df2.select_dtypes(include=['int64','uint8']).copy()
-
-df2_feats = list(df2)
-print(df2.groupby('FLUDX_YES').mean() )
 
 print(df2.isnull().sum())                                                       #Null check again
 ### Dropping Rows
@@ -113,55 +108,67 @@ mask = (series/series.sum() * 100)
 mask = (series/series.sum() * 100).lt(5)                                        # lt(%); where % is the cut off
 df2['PT RACE'] = np.where(df2['PT RACE'].isin(series[mask].index),'Other',df2['PT RACE'])
 
+series = pd.value_counts(df2['CPT'])
+mask = (series/series.sum() * 100)
+mask = (series/series.sum() * 100).lt(7)                                        # lt(%); where % is the cut off
+df2['CPT'] = np.where(df2['CPT'].isin(series[mask].index),'Other',df2['CPT'])
+
+#CPT
+
 new = series[~mask]
 new['Other'] = series[mask].sum()
 series.index = np.where(series.index.isin(series[mask].index),'Other',series.index)
 
-df2 = pd.get_dummies(df2,columns = ['YEAR','PT GENDER','PT STATE','PCP SPECIALTY','PT INS'], prefix = ['Yr','Gndr','State','Spclty','Ins'])
-
+df2 = pd.get_dummies(df2,columns = ['YEAR','PT GENDER','PT STATE','PCP SPECIALTY','PT INS','CPT'], prefix = ['Yr','Gndr','State','Spclty','Ins','CPT'])
 
 print(df2.dtypes)
 
+
+df2_qual = df2.select_dtypes(include=['object']).copy()
+df2_quant = df2.select_dtypes(include=['int64','uint8']).copy()
+
+df2_feats = list(df2)
+print(df2.groupby('FLUDX_YES').mean() )
 
 ### DV Density
 plt.figure(2); plt.title('Normal')
 sns.distplot(df2['FLUDX_YES'], kde=False, fit=st.norm)
 
 ################################################################################
-### Logistic Regression (sklearn)
-df3 = df2_quant.copy(deep = False)
-
-# prepare X and y
-x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
-y = df3[['FLUDX_YES']]
-
-X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
-
-logit = LogisticRegression()
-result = logit.fit(X_train,Y_train)
-#print(result.summary2())
-
-logit_yhat = logit.predict(X_test)
-logit_prob = logit.predict_proba(X_test)
-logit_ci90 = (np.percentile(logit_prob[:,1],90))
-logit_threshold = logit_ci90
-logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
-
-
-logit_score =  round(metrics.accuracy_score(Y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
-#print(' \n Intercept logit: ',logit.intercept_)
-logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
-logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
-
-### Evaluation Metrics
-tn = logit_confusion_matrix.iloc[0,0]
-fp = logit_confusion_matrix.iloc[0,1]
-fn = logit_confusion_matrix.iloc[1,0]
-tp = logit_confusion_matrix.iloc[1,1]
-sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
-specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+#### Logistic Regression (sklearn)
+#df3 = df2_quant.copy(deep = False)
+#
+## prepare X and y
+#x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
+#y = df3[['FLUDX_YES']]
+#
+#X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
+#
+#logit = LogisticRegression()
+#result = logit.fit(X_train,Y_train)
+##print(result.summary2())
+#
+#logit_yhat = logit.predict(X_test)
+#logit_prob = logit.predict_proba(X_test)
+#logit_ci90 = (np.percentile(logit_prob[:,1],90))
+#logit_threshold = logit_ci90
+#logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
+#
+#
+#logit_score =  round(metrics.accuracy_score(Y_test, logit_yhat)*100,2)
+#print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
+##print(' \n Intercept logit: ',logit.intercept_)
+#logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
+#logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+#print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
+#
+#### Evaluation Metrics
+#tn = logit_confusion_matrix.iloc[0,0]
+#fp = logit_confusion_matrix.iloc[0,1]
+#fn = logit_confusion_matrix.iloc[1,0]
+#tp = logit_confusion_matrix.iloc[1,1]
+#sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
+#specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
 ################################################################################
 ### Logistic Regression (statsmodel)
 
@@ -169,7 +176,8 @@ specificity = tn / (tn + fp) *100                                               
 traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
             'State_MD','State_Other','State_VA','State_WV',
             'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED']
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
 y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
 x = df2[traincols].astype(float)
 logit = Logit(y,x)
@@ -180,13 +188,14 @@ print(result.summary())
 X_train, X_test, Y_train, Y_test =tts(df2[traincols], df2['FLUDX_YES'], test_size = 0.3, random_state=5026)
 logit = Logit(Y_train, X_train)
 result = logit.fit()
+Y_hat = round(result.predict(X_test),6)
 print(result.summary2())
 
-probs = result.predict(df2[traincols].astype(float))
-perc = probs.sort_values(ascending =True)
+propensity = result.predict(df2[traincols].astype(float))
+perc = propensity.sort_values(ascending =True)
 perc = pd.DataFrame(perc.reset_index(drop=True))
-perc.columns = ['probs']
-perc['scale_weight'] = perc['probs']*1000
+perc.columns = ['propensity']
+perc['scale_weight'] = perc['propensity']*1000
 perc['cumulative_perc'] = 0
 perc['bin'] = 0
 
@@ -195,12 +204,51 @@ for row in perc:
     perc.bin = np.floor(perc.cumulative_perc*100)*1
 
 min_bin = perc.groupby('bin', axis = 0, as_index = False).min()
-min_bin.columns = ['bin','probs','min_scaleweight','cumulative_perc']
+min_bin.columns = ['bin','propensity','min_scaleweight','cumulative_perc']
 max_bin = perc.groupby('bin', axis = 0, as_index = False).max()
-max_bin.columns = ['bin','probs','max_scaleweight','cumulative_perc']
+max_bin.columns = ['bin','propensity','max_scaleweight','cumulative_perc']
 bin_table = min_bin
 bin_table['max_scaleweight'] = max_bin['max_scaleweight']
 
+prediction = pd.DataFrame({'propensity':propensity})
+prediction['bin'] = 0
+prediction['scaleweight'] = round(prediction.propensity*1000,0)
+for i in range(0,len(bin_table)):
+    prediction.bin[prediction.scaleweight >= bin_table.min_scaleweight.iloc[i]] = bin_table.bin.iloc[i]
+
+thresh_bin = 50
+prediction['pred'] = 0
+#quantile = prediction['pred'].quantile(.25)
+prediction.pred[prediction['bin'] >= thresh_bin]  =1
+#prediction.pred[prediction['bin'] >= quantile]  =1
+
+prediction[prediction >= 50].count()
+prediction[prediction < 50].count()
+
+
+### Evaluation Metrics
+logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y, prediction.pred), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
+
+#logit = LogisticRegression() #sklearn
+#logit = logit.fit(X_train,Y_train)
+#logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
+#proba = logit.predict_proba(X_test)
+#logit_ci50 = (np.percentile(proba[:,1],50))
+#logit_ci90 = (np.percentile(proba[:,1],90))
+#logit_threshold = logit_ci90
+#Y_hat = np.where(proba[:,1] >= logit_threshold,1,0)
+
+tn = logit_confusion_matrix.iloc[0,0]
+fp = logit_confusion_matrix.iloc[0,1]
+fn = logit_confusion_matrix.iloc[1,0]
+tp = logit_confusion_matrix.iloc[1,1]
+sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
+specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+accuracy = (tp + tn) / (tp + tn + fn + fp) *100
+print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
+
+################################################################################
 
 
 ################################################################################
