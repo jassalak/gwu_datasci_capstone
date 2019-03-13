@@ -293,6 +293,16 @@ if len(df2_missing) > 0:df2_missing.plot.bar()
 #https://stackoverflow.com/questions/47418299/python-combining-low-frequency-factors-category-counts
 
 
+#imbalance datasets
+
+# https://www.datacamp.com/community/tutorials/diving-deep-imbalanced-data
+# https://elitedatascience.com/imbalanced-classes
+# https://www.analyticsvidhya.com/blog/2017/03/imbalanced-classification-problem/
+# https://pandas-ml.readthedocs.io/en/latest/imbalance.html
+# https://www.kaggle.com/rafjaa/resampling-strategies-for-imbalanced-datasets
+# https://www.kaggle.com/qianchao/smote-with-imbalance-data
+
+
 
 
 
