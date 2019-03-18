@@ -86,6 +86,9 @@ df2.dropna(inplace=True)
 for f in df2.columns:
     print(df2[f].value_counts())
 
+# Lower Limit Thresholds
+pt_race_lt = 5
+
 ### Combining Variables into Other
 series = pd.value_counts(df2['PT STATE'])
 mask = (series/series.sum() * 100)                                              # To replace df['column'] use np.where I.e
@@ -105,15 +108,13 @@ df2['PT INS'] = np.where(df2['PT INS'].isin(series[mask].index),'Other',df2['PT 
 df2['PT RACE'].replace('_R','Other',inplace=True)                               # DOES NOT WORK WELL, DUPE OF 210 and 202
 series = pd.value_counts(df2['PT RACE'])
 mask = (series/series.sum() * 100)
-mask = (series/series.sum() * 100).lt(5)                                        # lt(%); where % is the cut off
+mask = (series/series.sum() * 100).lt(pt_race_lt)                                        # lt(%); where % is the cut off
 df2['PT RACE'] = np.where(df2['PT RACE'].isin(series[mask].index),'Other',df2['PT RACE'])
 
 series = pd.value_counts(df2['CPT'])
 mask = (series/series.sum() * 100)
 mask = (series/series.sum() * 100).lt(7)                                        # lt(%); where % is the cut off
 df2['CPT'] = np.where(df2['CPT'].isin(series[mask].index),'Other',df2['CPT'])
-
-#CPT
 
 new = series[~mask]
 new['Other'] = series[mask].sum()
@@ -129,6 +130,53 @@ df2_quant = df2.select_dtypes(include=['int64','uint8']).copy()
 
 df2_feats = list(df2)
 print(df2.groupby('FLUDX_YES').mean() )
+
+### SMOTE
+
+from imblearn.over_sampling import SMOTE
+
+from sklearn.model_selection import train_test_split as tts
+
+traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
+            'State_MD','State_Other','State_VA','State_WV',
+            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
+y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
+x = df2[traincols].astype(float)
+
+X_train, X_test, Y_train, Y_test = tts(x, y, test_size=0.3, random_state=5026)
+
+print("Number transactions X_train dataset: ", X_train.shape)
+print("Number transactions y_train dataset: ", Y_train.shape)
+print("Number transactions X_test dataset: ", X_test.shape)
+print("Number transactions y_test dataset: ", Y_test.shape)
+
+print("Before OverSampling, counts of label '1': {}".format(sum(Y_train==1)))
+print("Before OverSampling, counts of label '0': {} \n".format(sum(Y_train==0)))
+
+sm = SMOTE(random_state=5026)
+X_train_res, Y_train_res = sm.fit_sample(X_train, Y_train.values.ravel())
+
+print('After OverSampling, the shape of train_X: {}'.format(X_train_res.shape))
+print('After OverSampling, the shape of train_y: {} \n'.format(Y_train_res.shape))
+
+print("After OverSampling, counts of label '1': {}".format(sum(Y_train_res==1)))
+print("After OverSampling, counts of label '0': {}".format(sum(Y_train_res==0)))
+
+X_train_res_df_columns = ['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
+            'State_MD','State_Other','State_VA','State_WV',
+            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
+
+X_train_res_df = pd.DataFrame(data=X_train_res, columns = X_train_res_df_columns).reset_index(drop = True)
+
+
+
+Y_train_res_df = Y_train_res.columns = (pd.DataFrame(df2['FLUDX_YES'].astype(float)))
+
+
 
 ### DV Density
 plt.figure(2); plt.title('Normal')
@@ -180,6 +228,7 @@ traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
             'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
 y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
 x = df2[traincols].astype(float)
+
 logit = Logit(y,x)
 result = logit.fit()
 print(result.summary())
@@ -296,14 +345,43 @@ if len(df2_missing) > 0:df2_missing.plot.bar()
 #imbalance datasets
 
 # https://www.datacamp.com/community/tutorials/diving-deep-imbalanced-data
-# https://elitedatascience.com/imbalanced-classes
-# https://www.analyticsvidhya.com/blog/2017/03/imbalanced-classification-problem/
-# https://pandas-ml.readthedocs.io/en/latest/imbalance.html
-# https://www.kaggle.com/rafjaa/resampling-strategies-for-imbalanced-datasets
+# https://elitedatascience.com/imbalanced-classes --> goes over randomforest and svm
+# https://www.analyticsvidhya.com/blog/2017/03/imbalanced-classification-problem/ --> R-lang, Nice flow charts
+# https://pandas-ml.readthedocs.io/en/latest/imbalance.html --> super simple code, uses .imbalance package
+# https://www.kaggle.com/rafjaa/resampling-strategies-for-imbalanced-datasets --> xgboost, pca
 # https://www.kaggle.com/qianchao/smote-with-imbalance-data
 
 
+from imblearn.over_sampling import SMOTE
 
+traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
+            'State_MD','State_Other','State_VA','State_WV',
+            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
+y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
+x = df2[traincols].astype(float)
+
+def plot_2d_space(X, y, label='Classes'):
+    colors = ['#1F77B4', '#FF7F0E']
+    markers = ['o', 's']
+    for l, c, m in zip(np.unique(y), colors, markers):
+        plt.scatter(
+            X[y==l, 0],
+            X[y==l, 1],
+            c=c, label=l, marker=m
+        )
+    plt.title(label)
+    plt.legend(loc='upper right')
+    plt.show()
+
+smote = SMOTE(ratio='minority')
+x_sm, y_sm = smote.fit_sample(x, y)
+
+y_sm[0].value_counts()
+plot_2d_space(x_sm, y_sm, 'SMOTE over-sampling')
+
+x_sm = pd.DataFrame(data=x_sm[1:,1:], index = x_sm[1:,0], columns = x_sm[0,1:])
 
 
 
