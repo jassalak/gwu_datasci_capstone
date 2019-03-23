@@ -38,6 +38,8 @@ from statsmodels.discrete.discrete_model import Logit
 from imblearn.over_sampling import SMOTE
 from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.decomposition import PCA
 
 ################################################################################
 
@@ -79,7 +81,9 @@ df1 = pd.read_excel('df1.xlsx',sheet_name='Sheet1')
 ################################################################################
 
 df2 = df1.copy(deep = False)
-df2 = df1.drop(['ACCTNUM','PCP','LMG PRACTICE','DOS','DIAGNOSIS CODES','PLACE OF SERVICE', 'CPT DESCRIPTION','PT ADDRESS 1','PT ADDRESS 2', 'PT ZIP', 'PT DOB'], axis=1)
+df2 = df1.drop(['ACCTNUM','PCP','LMG PRACTICE','DOS','DIAGNOSIS CODES',
+                'PLACE OF SERVICE', 'CPT DESCRIPTION','PT ADDRESS 1',
+                'PT ADDRESS 2', 'PT ZIP', 'PT DOB'], axis=1)
 print(df2.info())
 
 
@@ -87,9 +91,13 @@ print(df2.isnull().sum())                                                       
 ### Dropping Rows
 df2.dropna(inplace=True)
 
+df2['AGE_BIN']= pd.cut(df2['PTAGE'],[0,18,35,55,80,110], labels = ['1','2','3','4','5'] )
+
 ### Value Counts
 for f in df2.columns:
     print(df2[f].value_counts())
+
+################################################################################
 
 # Lower Limit Thresholds
 pt_race_lt = 5
@@ -125,8 +133,7 @@ new = series[~mask]
 new['Other'] = series[mask].sum()
 series.index = np.where(series.index.isin(series[mask].index),'Other',series.index)
 
-df2 = pd.get_dummies(df2,columns = ['YEAR','PT GENDER','PT STATE','PCP SPECIALTY','PT INS','CPT'], prefix = ['Yr','Gndr','State','Spclty','Ins','CPT'])
-
+df2 = pd.get_dummies(df2,columns = ['YEAR','PT GENDER','PT STATE','PCP SPECIALTY','PT INS','CPT','AGE_BIN'], prefix = ['Yr','Gndr','State','Spclty','Ins','CPT','Age'])
 print(df2.dtypes)
 
 
@@ -136,13 +143,53 @@ df2_quant = df2.select_dtypes(include=['int64','uint8']).copy()
 df2_feats = list(df2)
 print(df2.groupby('FLUDX_YES').mean() )
 
-### SMOTE
+################################################################################
+
+# Import `PCA` from `sklearn.decomposition`
 
 traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
             'State_MD','State_Other','State_VA','State_WV',
             'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
             'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
+            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other',
+            'Age_1','Age_2','Age_3','Age_4','Age_5']
+
+df3 = df2_quant.copy(deep = True)
+df3 = df3[traincols].astype(float)
+
+# Build the model
+pca = PCA(n_components=30)
+
+# Reduce the data, output is ndarray
+df3 = pca.fit_transform(df3)
+
+# Inspect shape of the `reduced_data`
+df3.shape
+
+# print out the reduced data
+print(df3)
+
+df3 = pd.DataFrame(data=df3, columns = traincols).reset_index(drop = True)
+
+################################################################################
+
+### IV Correlation to DV
+print("Find most important features relative to DV")
+df2_corr = df2.corr()
+df2_corr.sort_values(["FLUDX_YES"], ascending = False, inplace = True)
+print(df2_corr.FLUDX_YES)
+df2_feats = list(df2)
+
+################################################################################
+
+### SMOTE (df2)
+
+traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
+            'State_MD','State_Other','State_VA','State_WV',
+            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other',
+            'Age_1','Age_2','Age_3','Age_4','Age_5']
 y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
 x = df2[traincols].astype(float)
 
@@ -163,29 +210,63 @@ print('After OverSampling, the shape of train_y: {} \n'.format(Y_train_smote.sha
 print("After OverSampling, counts of label '1': {}".format(sum(Y_train_smote==1)))
 print("After OverSampling, counts of label '0': {}".format(sum(Y_train_smote==0)))
 
-X_cols = ['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
-            'State_MD','State_Other','State_VA','State_WV',
-            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other']
-X_train_smote = pd.DataFrame(data=X_train_smote, columns = X_cols).reset_index(drop = True)
+
+X_train_smote = pd.DataFrame(data=X_train_smote, columns = traincols).reset_index(drop = True)
 
 Y_train_smote = pd.DataFrame(data = Y_train_smote).reset_index(drop = True)
 Y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
 
+################################################################################
+
+### SMOTE (df3)
+
+#traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
+#            'State_MD','State_Other','State_VA','State_WV',
+#            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+#            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+#            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other',
+#            'Age_1','Age_2','Age_3','Age_4','Age_5']
+
+y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
+x = df3[traincols].astype(float)
+
+X_train, X_test, Y_train, Y_test = tts(x, y, test_size=0.3, random_state=5026)
+
+print("Number transactions X_train dataset: ", X_train.shape)
+print("Number transactions y_train dataset: ", Y_train.shape)
+print("Number transactions X_test dataset: ", X_test.shape)
+print("Number transactions y_test dataset: ", Y_test.shape)
+
+
+sm = SMOTE(random_state=5026)
+X_train_smote, Y_train_smote = sm.fit_sample(X_train, Y_train.values.ravel())
+
+print('After OverSampling, the shape of train_X: {}'.format(X_train_smote.shape))
+print('After OverSampling, the shape of train_y: {} \n'.format(Y_train_smote.shape))
+
+print("After OverSampling, counts of label '1': {}".format(sum(Y_train_smote==1)))
+print("After OverSampling, counts of label '0': {}".format(sum(Y_train_smote==0)))
+
+
+X_train_smote = pd.DataFrame(data=X_train_smote, columns = traincols).reset_index(drop = True)
+
+Y_train_smote = pd.DataFrame(data = Y_train_smote).reset_index(drop = True)
+Y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
+
+################################################################################
 
 ### DV Density
 plt.figure(2); plt.title('Normal')
 sns.distplot(df2['FLUDX_YES'], kde=False, fit=st.norm)
 
 ################################################################################
-#### Logistic Regression (sklearn)
-df3 = df2_quant.copy(deep = False)
+#### Logistic Regression (sklearn) DF2
+#df3 = df2_quant.copy(deep = False)
 # prepare X and y
-x = df3.drop(['FLUDX_YES','UNITS','PTAGE'],axis=1,inplace=False) # PATIENT AGE!!!!!!!!!!!!!!!!!
-y = df3[['FLUDX_YES']]
+#x = df3.drop(['FLUDX_YES','UNITS','PTAGE'],axis=1,inplace=False) # PATIENT AGE!!!!!!!!!!!!!!!!!
+#y = df3[['FLUDX_YES']]
 
-X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
+#X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
 
 logit = LogisticRegression()
 result = logit.fit(X_train,Y_train)
@@ -204,6 +285,8 @@ print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
 logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
 logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
 print('\n Confusion Matrix logit SMOTE: \n',logit_confusion_matrix)
+logit_auc = metrics.roc_auc_score(Y_test, logit_yhat)
+print('\n AUC: \n', logit_auc) #0.5688
 
 ### Evaluation Metrics
 tn = logit_confusion_matrix.iloc[0,0]
@@ -213,8 +296,44 @@ tp = logit_confusion_matrix.iloc[1,1]
 sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
 specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
 ################################################################################
-#### Logistic Regression (sklearn) SMOTE
-df3 = df2_quant.copy(deep = False)
+#### Logistic Regression (sklearn) DF3
+#df3 = df2_quant.copy(deep = False)
+# prepare X and y
+#x = df3.drop(['FLUDX_YES','UNITS','PTAGE'],axis=1,inplace=False) # PATIENT AGE!!!!!!!!!!!!!!!!!
+#y = df3[['FLUDX_YES']]
+
+#X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
+
+logit = LogisticRegression()
+result = logit.fit(X_train,Y_train)
+#print(result.summary())
+
+logit_yhat = logit.predict(X_test)
+logit_prob = logit.predict_proba(X_test)
+logit_ci90 = (np.percentile(logit_prob[:,1],90))
+logit_threshold = logit_ci90
+logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
+
+
+logit_score =  round(metrics.accuracy_score(Y_test, logit_yhat)*100,2)
+print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
+#print(' \n Intercept logit: ',logit.intercept_)
+logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
+logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+print('\n Confusion Matrix logit SMOTE: \n',logit_confusion_matrix)
+logit_auc = metrics.roc_auc_score(Y_test, logit_yhat)
+print('\n AUC: \n', logit_auc)  #  0.558901607998342
+
+### Evaluation Metrics
+tn = logit_confusion_matrix.iloc[0,0]
+fp = logit_confusion_matrix.iloc[0,1]
+fn = logit_confusion_matrix.iloc[1,0]
+tp = logit_confusion_matrix.iloc[1,1]
+sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
+specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+################################################################################
+#### Logistic Regression (sklearn) SMOTE df2
+#df3 = df2_quant.copy(deep = False)
 
 # prepare X and y
 #x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
@@ -239,6 +358,8 @@ print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
 logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
 logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
 print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
+logit_auc = metrics.roc_auc_score(Y_test, logit_yhat)
+print('\n AUC: \n', logit_auc) #0.5575
 
 ### Evaluation Metrics
 tn = logit_confusion_matrix.iloc[0,0]
@@ -249,45 +370,264 @@ sensitivity = tp/(tp+fn)*100                                                    
 specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
 ################################################################################
 
+#### Logistic Regression (sklearn) SMOTE df3
+#df3 = df2_quant.copy(deep = False)
+
+# prepare X and y
+#x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
+#y = df3[['FLUDX_YES']]
+
+#X_train, X_test, Y_train, Y_test =tts(x, y, test_size = 0.3, random_state=5026)
+
+
+logit = LogisticRegression()
+result = logit.fit(X_train_smote,Y_train_smote)
+
+logit_yhat = logit.predict(X_test)
+logit_prob = logit.predict_proba(X_test)
+logit_ci90 = (np.percentile(logit_prob[:,1],90))
+logit_threshold = logit_ci90
+logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
+
+
+logit_score =  round(metrics.accuracy_score(Y_test, logit_yhat)*100,2)
+print('\n Score logit:', metrics.accuracy_score(Y_test, logit_yhat) )
+#print(' \n Intercept logit: ',logit.intercept_)
+logit_coef = pd.DataFrame(logit.coef_[0], X_test.columns, columns=['logit_Coefficients'])
+logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(Y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
+logit_auc = metrics.roc_auc_score(Y_test, logit_yhat)
+print('\n AUC: \n', logit_auc) #0.550510259
+
+### Evaluation Metrics
+tn = logit_confusion_matrix.iloc[0,0]
+fp = logit_confusion_matrix.iloc[0,1]
+fn = logit_confusion_matrix.iloc[1,0]
+tp = logit_confusion_matrix.iloc[1,1]
+sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
+specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+################################################################################
+#df2
+# SVC -->  https://elitedatascience.com/imbalanced-classes
 # Separate input features (X) and target variable (y)
 #y = df.balance
 #X = df.drop('balance', axis=1)
 
 # Train model
-clf_3 = SVC(kernel='linear',
+svc = SVC(kernel='linear',
             class_weight='balanced', # penalize
             probability=True)
 
-clf_3.fit(x, y)
+svc.fit(X_train, Y_train)
 
 # Predict on training set
-pred_y_3 = clf_3.predict(x)
+svc_yhat = svc.predict(X_test)
 
 # Is our model still predicting just one class?
-print( np.unique( pred_y_3 ) )
+print( np.unique( svc_yhat ) )
+
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, svc_yhat) ) # 0.5836605446485117
+
+# What about AUROC?
+svc_prob = svc.predict_proba(X_test)
+svc_prob = [p[1] for p in svc_prob]
+print( roc_auc_score(Y_test, svc_prob) ) # 0.6473181635658544
+
+################################################################################
+#df3
+# SVC -->  https://elitedatascience.com/imbalanced-classes
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+svc = SVC(kernel='linear',
+            class_weight='balanced', # penalize
+            probability=True)
+
+svc.fit(X_train, Y_train)
+
+# Predict on training set
+svc_yhat = svc.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( svc_yhat ) )
+
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, svc_yhat) ) #
+
+# What about AUROC?
+svc_prob = svc.predict_proba(X_test)
+svc_prob = [p[1] for p in svc_prob]
+print( roc_auc_score(Y_test, svc_prob) ) #
+
+##############################################################################
+# SVC -->  SMOTE DF2
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+svc = SVC(kernel='linear',
+            class_weight='balanced', # penalize
+            probability=True)
+
+svc.fit(X_train_smote, Y_train_smote)
+
+# Predict on training set
+svc_yhat = svc.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( svc_yhat ) )
+
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, svc_yhat) ) # 0.6051931602279924
+
+# What about AUROC?
+svc_prob = svc.predict_proba(X_test)
+svc_prob = [p[1] for p in svc_prob]
+print( roc_auc_score(Y_test, svc_prob) ) # 0.6462403024886211
+
+################################################################################
+
+# SVC -->  SMOTE DF3
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+svc = SVC(kernel='linear',
+            class_weight='balanced', # penalize
+            probability=True)
+
+svc.fit(X_train_smote, Y_train_smote)
+
+# Predict on training set
+svc_yhat = svc.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( svc_yhat ) )
+
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, svc_yhat) ) #
+
+# What about AUROC?
+svc_prob = svc.predict_proba(X_test)
+svc_prob = [p[1] for p in svc_prob]
+print( roc_auc_score(Y_test, svc_prob) ) #
+##############################################################################
+
+# Tree Model -->
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+tree = RandomForestClassifier()
+tree.fit(X_train, Y_train)
+
+# Predict on training set
+tree_yhat = tree.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( tree_yhat ) )
 
 
 # How's our accuracy?
-print( metrics.accuracy_score(y, pred_y_3) )
+print( metrics.accuracy_score(Y_test, tree_yhat) ) # 0.966624445851805
 
 
 # What about AUROC?
-prob_y_3 = clf_3.predict_proba(x)
-prob_y_3 = [p[1] for p in prob_y_3]
-print( roc_auc_score(y, prob_y_3) )
+tree_prob = tree.predict_proba(X_test)
+tree_prob = [p[1] for p in tree_prob]
+print( roc_auc_score(Y_test, tree_prob) ) # 0.6793665953240706
 
 
+################################################################################
+# Tree Model --> SMOTE
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+tree = RandomForestClassifier()
+tree.fit(X_train_smote, Y_train_smote)
+
+# Predict on training set
+tree_yhat = tree.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( tree_yhat ) )
 
 
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, tree_yhat) ) # 0.5980367321089297
 
 
+# What about AUROC?
+tree_prob = tree.predict_proba(X_test)
+tree_prob = [p[1] for p in tree_prob]
+print( roc_auc_score(Y_test, tree_prob) ) # 0.673525358008306
 
 
+################################################################################
+
+# Tree Model --> df3
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+tree = RandomForestClassifier()
+tree.fit(X_train, Y_train)
+
+# Predict on training set
+tree_yhat = tree.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( tree_yhat ) )
 
 
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, tree_yhat) ) #
 
 
+# What about AUROC?
+tree_prob = tree.predict_proba(X_test)
+tree_prob = [p[1] for p in tree_prob]
+print( roc_auc_score(Y_test, tree_prob) ) #
 
+
+################################################################################
+
+# Tree Model --> SMOTE df3
+# Separate input features (X) and target variable (y)
+#y = df.balance
+#X = df.drop('balance', axis=1)
+
+# Train model
+tree = RandomForestClassifier()
+tree.fit(X_train_smote, Y_train_smote)
+
+# Predict on training set
+tree_yhat = tree.predict(X_test)
+
+# Is our model still predicting just one class?
+print( np.unique( tree_yhat ) )
+
+
+# How's our accuracy?
+print( metrics.accuracy_score(Y_test, tree_yhat) ) #
+
+
+# What about AUROC?
+tree_prob = tree.predict_proba(X_test)
+tree_prob = [p[1] for p in tree_prob]
+print( roc_auc_score(Y_test, tree_prob) ) #
+
+
+################################################################################
 
 
 
