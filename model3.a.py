@@ -706,8 +706,13 @@ print( roc_auc_score(Y_test, svc_prob) ) #0.661868789906019
 #y = df.balance
 #X = df.drop('balance', axis=1)
 
+class_wgts = {i: 1 for i in Y_train}
+class_wgts[1] = 10
+class_wgts[0] = 1
+class_wgts.pop('FLUDX_YES')
+
 # Train model
-tree = RandomForestClassifier()
+tree = RandomForestClassifier( class_weight = class_wgts)
 tree.fit(X_train, Y_train)
 
 # Predict on training set
