@@ -38,6 +38,7 @@ from statsmodels.discrete.discrete_model import Logit
 from imblearn.over_sampling import SMOTE
 from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score
+from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.decomposition import PCA
 
@@ -91,8 +92,6 @@ print(df2.isnull().sum())                                                       
 ### Dropping Rows
 df2.dropna(inplace=True)
 
-df2['AGE_BIN']= pd.cut(df2['PTAGE'],[0,18,35,55,80,110], labels = ['1','2','3','4','5'] )
-
 ### Value Counts
 for f in df2.columns:
     print(df2[f].value_counts())
@@ -107,6 +106,9 @@ pt_race_lt = 5
 cpt_lt = 7
 
 ### Combining Variables into Other
+
+df2['AGE_BIN']= pd.cut(df2['PTAGE'],[0,18,35,55,80,110], labels = ['1','2','3','4','5'] )
+
 series = pd.value_counts(df2['PT STATE'])
 mask = (series/series.sum() * 100)                                              # To replace df['column'] use np.where I.e
 mask = (series/series.sum() * 100).lt(pt_state_lt)                                        # lt(%); where % is the cut off
@@ -148,58 +150,95 @@ df2_feats = list(df2)
 print(df2.groupby('FLUDX_YES').mean() )
 
 ################################################################################
-# DF3
-# Import `PCA` from `sklearn.decomposition`
+# DF3 # NOT USING PCA ANYMORE
 
-traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
-            'State_MD','State_Other','State_VA','State_WV',
-            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other',
-            'Age_1','Age_2','Age_3','Age_4','Age_5']
+# Feature Selection using Correlation Rank
+ #https://blog.datadive.net/selecting-good-features-part-iii-random-forests/
 
-df3 = df2_quant.copy(deep = True)
-df3 = df3[traincols].astype(float)
-
-# Build the model
-pca = PCA(n_components=30)
-
-# Reduce the data, output is ndarray
-df3 = pca.fit_transform(df3)
-
-# Inspect shape of the `reduced_data`
-df3.shape
-
-# print out the reduced data
-print(df3)
-
-df3 = pd.DataFrame(data=df3, columns = traincols).reset_index(drop = True)
-
-################################################################################
-
-# DF4
-# Import `PCA` from `sklearn.decomposition`
-
-traincols =['Gndr_F','Gndr_M',
-            'State_MD','State_Other','State_VA','State_WV',
-            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-            'Age_1','Age_2','Age_3','Age_4','Age_5']
-
-df4 = df2_quant.copy(deep = True)
-df4 = df4[traincols].astype(float)
-
-################################################################################
-### IV Correlation to DV
 print("Find most important features relative to DV")
 df2_corr = df2.corr()
 df2_corr.sort_values(["FLUDX_YES"], ascending = False, inplace = True)
 print(df2_corr.FLUDX_YES)
 df2_feats = list(df2)
 
+corr_traincols=['Age_1','Spclty_Pediatrics','CPT_90686', 'CPT_90685','Ins_CIGNA','State_VA','Ins_MCAID','Ins_BCBS','Gndr_M', 'Ins_TRICARE']
+
+df3 = df2_quant.copy(deep = True)
+df3 = df3[corr_traincols].astype(float)
+
+# Build the model
+#pca = PCA(n_components=30)
+# Reduce the data, output is ndarray
+#df3 = pca.fit_transform(df3)
+
+
+# Inspect shape of the `reduced_data`
+df3.shape
+
+# print out the reduced data
+#print(df3)
+
+df3 = pd.DataFrame(data=df3, columns = corr_traincols).reset_index(drop = True)
+
+################################################################################
+
+# DF4 DECISION TREE+ Mean decrease impurity
+
+## Partition Data (DecisionTree)
+dt_x = df2_quant.drop(['UNITS','PTAGE','Yr_2016','Yr_2017','FLUDX_YES'],axis=1,inplace=False)
+df4_feats = list(dt_x)
+dt_y = df2_quant[['FLUDX_YES']]
+X_train, X_test, Y_train, Y_test =tts(dt_x, dt_y, test_size = 0.3, random_state=6202)
+#print(X_train.dtypes)
+
+## Depth Determination (DecisionTree)
+### Range of values to try, and where to store MSE output
+max_depth_range = range(1, 12)
+all_MSE_scores = []
+
+### Calculate MSE for each value of max_depth
+for depth in max_depth_range:
+    treereg = DecisionTreeRegressor(max_depth=depth, random_state=5026)
+    MSE_scores = cross_val_score(treereg, X_train, Y_train, cv=12, scoring='neg_mean_squared_error')
+    all_MSE_scores.append(np.mean(np.sqrt(-MSE_scores)))
+
+### Plot max_depth (x-axis) versus MSE (y-axis)
+plt.figure(5)
+plt.plot(max_depth_range, all_MSE_scores)
+plt.title('Max Depth Range Plot (Decision Tree)')
+plt.xlabel('max_depth')
+plt.ylabel('MSE (lower is better)')
+plt.show()
+
+## Feature Importance
+### Based on max_depth plot, depth = 8 is most ideal
+treereg = DecisionTreeRegressor(max_depth=3, random_state=5026)
+treereg.fit(X_train, Y_train)
+
+### "Gini importance" of each feature:
+#print(pd.DataFrame({'feature':df4_feats, 'importance':sorted(treereg.feature_importances_ *1000, reverse = True)}))
+
+### Mean decrease impurity
+print( "Features sorted by their score:" )
+print( sorted(zip(map(lambda X_train: round(X_train, 4), treereg.feature_importances_ *1000 ), df4_feats), reverse=True))
+
+imprty_traincols=['Age_1','State_WV','Spclty_Pediatrics','CPT_90688','Ins_Other','State_VA']
+
+df4 = df2_quant.copy(deep = True)
+df4 = df4[imprty_traincols].astype(float)
+
+################################################################################
+
+
 ################################################################################
 
 ### SMOTE (df2)
+
+traincols =['Gndr_F','Gndr_M',
+            'State_MD','State_Other','State_VA','State_WV',
+            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
+            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
+            'Age_1','Age_2','Age_3','Age_4','Age_5']
 
 traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
             'State_MD','State_Other','State_VA','State_WV',
@@ -712,7 +751,7 @@ class_wgts[0] = 1
 class_wgts.pop('FLUDX_YES')
 
 # Train model
-tree = RandomForestClassifier( class_weight = class_wgts)
+tree = RandomForestClassifier( class_weight = class_wgts, random_state=5026)
 tree.fit(X_train, Y_train)
 
 # Predict on training set
