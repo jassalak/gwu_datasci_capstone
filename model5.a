@@ -226,55 +226,18 @@ df3_y_train_smote = pd.DataFrame(data = df3_y_train_smote).reset_index(drop = Tr
 df3_y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
 
 
-
-
 #df3 = pd.DataFrame(data=df3, columns = traincols_df3).reset_index(drop = True)
 ################################################################################
 
-### SMOTE (df3)
-
-#traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
-#            'State_MD','State_Other','State_VA','State_WV',
-#            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-#            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-#            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other',
-#            'Age_1','Age_2','Age_3','Age_4','Age_5']
-
-y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
-x = df3[corr_traincols].astype(float)
-
-x_train, x_test, y_train, y_test = tts(x, y, test_size=0.3, random_state=5026)
-
-print("Number transactions x_train dataset: ", x_train.shape)
-print("Number transactions y_train dataset: ", y_train.shape)
-print("Number transactions x_test dataset: ", x_test.shape)
-print("Number transactions y_test dataset: ", y_test.shape)
-
-
-sm = SMOTE(random_state=5026)
-x_train_smote, y_train_smote = sm.fit_sample(x_train, y_train.values.ravel())
-
-print('After OverSampling, the shape of train_X: {}'.format(x_train_smote.shape))
-print('After OverSampling, the shape of train_y: {} \n'.format(y_train_smote.shape))
-
-print("After OverSampling, counts of label '1': {}".format(sum(y_train_smote==1)))
-print("After OverSampling, counts of label '0': {}".format(sum(y_train_smote==0)))
-
-
-x_train_smote = pd.DataFrame(data=x_train_smote, columns = corr_traincols).reset_index(drop = True)
-
-y_train_smote = pd.DataFrame(data = y_train_smote).reset_index(drop = True)
-y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
-
 ################################################################################
 
-# DF4 DECISION TREE + Mean decrease impurity
+# df4 (decision tree) + Mean decrease impurity -- regular and smote
 
 ## Partition Data (DecisionTree)
-dt_x = df2_quant.drop(['UNITS','PTAGE','Yr_2016','Yr_2017','FLUDX_YES'],axis=1,inplace=False)
-df4_feats = list(dt_x)
-dt_y = df2_quant[['FLUDX_YES']]
-x_train, x_test, y_train, y_test =tts(dt_x, dt_y, test_size = 0.3, random_state=6202)
+#dt_x = df2_quant.drop(['UNITS','PTAGE','Yr_2016','Yr_2017','FLUDX_YES'],axis=1,inplace=False)
+#df4_feats = list(dt_x)
+#dt_y = df2_quant[['FLUDX_YES']]
+#x_train, x_test, y_train, y_test =tts(df2_x, df2_y, test_size = 0.3, random_state=5026)
 #print(x_train.dtypes)
 
 ## Depth Determination (DecisionTree)
@@ -285,7 +248,7 @@ all_MSE_scores = []
 ### Calculate MSE for each value of max_depth
 for depth in max_depth_range:
     treereg = DecisionTreeRegressor(max_depth=depth, random_state=5026)
-    MSE_scores = cross_val_score(treereg, x_train, y_train, cv=12, scoring='neg_mean_squared_error')
+    MSE_scores = cross_val_score(treereg, df2_x_train, df2_y_train, cv=12, scoring='neg_mean_squared_error')
     all_MSE_scores.append(np.mean(np.sqrt(-MSE_scores)))
 
 ### Plot max_depth (x-axis) versus MSE (y-axis)
@@ -299,119 +262,81 @@ plt.show()
 ## Feature Importance
 ### Based on max_depth plot, depth = 8 is most ideal
 treereg = DecisionTreeRegressor(max_depth=3, random_state=5026)
-treereg.fit(x_train, y_train)
+treereg.fit(df2_x_train, df2_y_train)
 
 ### "Gini importance" of each feature:
 #print(pd.DataFrame({'feature':df4_feats, 'importance':sorted(treereg.feature_importances_ *1000, reverse = True)}))
 
 ### Mean decrease impurity
 print( "Features sorted by their score:" )
-print( sorted(zip(map(lambda x_train: round(x_train, 4), treereg.feature_importances_ *1000 ), df4_feats), reverse=True))
+print( sorted(zip(map(lambda df2_x_train: round(df2_x_train, 4), treereg.feature_importances_ *1000 ), list(df2_x_train)), reverse=True))
 
-imprty_traincols=['Age_1','State_WV','Spclty_Pediatrics','CPT_90688','Ins_Other','State_VA']
+traincols_df4=['FLUDX_YES','Spclty_Pediatrics','Age_Child','Age_Adult','Ins_CIGNA','Age_Baby','Ins_AETNA','Spclty_Family Practice']
 
-df4 = df2_quant.copy(deep = True)
-df4 = df4[imprty_traincols].astype(float)
+df4 = df2.copy(deep = True)
+df4 = df4[traincols_df4].astype(float)
+print(df4.shape)                                                                # Inspect shape of the `reduced_data`
 
-################################################################################
+df4_x = df4.drop(['FLUDX_YES'],axis = 1 ).astype(float)
+df4_y = pd.DataFrame(df4['FLUDX_YES'].astype(float))
 
-### SMOTE (df4)
+###
 
-traincols =['Gndr_F','Gndr_M',
-            'State_MD','State_Other','State_VA','State_WV',
-            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-            'Age_1','Age_2','Age_3','Age_4','Age_5']
+df4_x_train, df4_x_test, df4_y_train, df4_y_test = tts(df4_x, df4_y, test_size=0.3, random_state=5026)
 
-y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
-x = df2[imprty_traincols].astype(float)
-
-x_train, x_test, y_train, y_test = tts(x, y, test_size=0.3, random_state=5026)
-
-print("Number transactions x_train dataset: ", x_train.shape)
-print("Number transactions y_train dataset: ", y_train.shape)
-print("Number transactions x_test dataset: ", x_test.shape)
-print("Number transactions y_test dataset: ", y_test.shape)
-
+print("Shape of x_train dataset: ", df4_x_train.shape)
+print("Shape of y_train dataset: ", df4_y_train.shape)
+print("Shape of x_test dataset: ", df4_x_test.shape)
+print("Shape of y_test dataset: ", df4_y_test.shape)
 
 sm = SMOTE(random_state=5026)
-x_train_smote, y_train_smote = sm.fit_sample(x_train, y_train.values.ravel())
+df4_x_train_smote, df4_y_train_smote = sm.fit_sample(df4_x_train, df4_y_train.values.ravel())
+print('Resampled dataset shape %s' % Counter(df4_y_train_smote))
+traincols = list(df4_x)
+df4_x_train_smote = pd.DataFrame(data=df4_x_train_smote, columns = traincols).reset_index(drop = True)
 
-print('After OverSampling, the shape of train_X: {}'.format(x_train_smote.shape))
-print('After OverSampling, the shape of train_y: {} \n'.format(y_train_smote.shape))
+df4_y_train_smote = pd.DataFrame(data = df4_y_train_smote).reset_index(drop = True)
+df4_y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
 
-print("After OverSampling, counts of label '1': {}".format(sum(y_train_smote==1)))
-print("After OverSampling, counts of label '0': {}".format(sum(y_train_smote==0)))
-
-
-x_train_smote = pd.DataFrame(data=x_train_smote, columns = imprty_traincols).reset_index(drop = True)
-
-y_train_smote = pd.DataFrame(data = y_train_smote).reset_index(drop = True)
-y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
-################################################################################
-# DF5
-
-# Feature Selection using Correlation Rank
- #https://blog.datadive.net/selecting-good-features-part-iii-random-forests/
-
-
-traincols=['Age_1','Spclty_Pediatrics','CPT_90686', 'CPT_90685','Ins_CIGNA','State_VA','Ins_MCAID','Ins_BCBS','Gndr_M', 'Ins_TRICARE']
-
-df5 = df2_quant.copy(deep = True)
-df5 = df3[corr_traincols].astype(float)
-
-
-
-# Inspect shape of the `reduced_data`
-df5.shape
-
-# print out the reduced data
-#print(df3)
-
-df5 = pd.DataFrame(data=df3, columns = corr_traincols).reset_index(drop = True)
 ################################################################################
 
-### SMOTE (df5)
+################################################################################
+# df5 -- manual selection
 
-#traincols =['Yr_2016','Yr_2017','Gndr_F','Gndr_M',
-#            'State_MD','State_Other','State_VA','State_WV',
-#            'Spclty_Family Practice','Spclty_Internal Medicine','Spclty_Other',
-#            'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_MCAID','Ins_MCARE','Ins_Other','Ins_TRICARE','Ins_UNITED',
-#            'CPT_90658', 'CPT_90662', 'CPT_90685','CPT_90686', 'CPT_90688', 'CPT_Other',
-#            'Age_1','Age_2','Age_3','Age_4','Age_5']
+traincols_df5=['FLUDX_YES','Spclty_Pediatrics','Age_Child','Age_Adult','Ins_CIGNA','Age_Baby','Ins_AETNA','Spclty_Family Practice']
 
-y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
-x = df3[corr_traincols].astype(float)
+df5 = df2.copy(deep = True)
+df5 = df5[traincols_df4].astype(float)
+print(df5.shape)                                                                # Inspect shape of the `reduced_data`
 
-x_train, x_test, y_train, y_test = tts(x, y, test_size=0.3, random_state=5026)
+df5_x = df5.drop(['FLUDX_YES'],axis = 1 ).astype(float)
+df5_y = pd.DataFrame(df5['FLUDX_YES'].astype(float))
 
-print("Number transactions x_train dataset: ", x_train.shape)
-print("Number transactions y_train dataset: ", y_train.shape)
-print("Number transactions x_test dataset: ", x_test.shape)
-print("Number transactions y_test dataset: ", y_test.shape)
+###
 
+df5_x_train, df5_x_test, df5_y_train, df5_y_test = tts(df5_x, df5_y, test_size=0.3, random_state=5026)
+
+print("Shape of x_train dataset: ", df5_x_train.shape)
+print("Shape of y_train dataset: ", df5_y_train.shape)
+print("Shape of x_test dataset: ", df5_x_test.shape)
+print("Shape of y_test dataset: ", df5_y_test.shape)
 
 sm = SMOTE(random_state=5026)
-x_train_smote, y_train_smote = sm.fit_sample(x_train, y_train.values.ravel())
+df5_x_train_smote, df5_y_train_smote = sm.fit_sample(df5_x_train, df5_y_train.values.ravel())
+print('Resampled dataset shape %s' % Counter(df5_y_train_smote))
+traincols = list(df5_x)
+df5_x_train_smote = pd.DataFrame(data=df5_x_train_smote, columns = traincols).reset_index(drop = True)
 
-print('After OverSampling, the shape of train_X: {}'.format(x_train_smote.shape))
-print('After OverSampling, the shape of train_y: {} \n'.format(y_train_smote.shape))
-
-print("After OverSampling, counts of label '1': {}".format(sum(y_train_smote==1)))
-print("After OverSampling, counts of label '0': {}".format(sum(y_train_smote==0)))
-
-
-x_train_smote = pd.DataFrame(data=x_train_smote, columns = corr_traincols).reset_index(drop = True)
-
-y_train_smote = pd.DataFrame(data = y_train_smote).reset_index(drop = True)
-y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
-
+df5_y_train_smote = pd.DataFrame(data = df5_y_train_smote).reset_index(drop = True)
+df5_y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
 ################################################################################
 
 ### DV Density
 plt.figure(2); plt.title('Normal')
 sns.distplot(df2['FLUDX_YES'], kde=False, fit=st.norm)
 
+plt.figure(3); plt.title('Normal')
+sns.distplot(df2smote['FLUDX_YES'], kde=False, fit=st.norm)
 ################################################################################
 #### Logistic Regression (sklearn) DF2
 #df3 = df2_quant.copy(deep = False)
