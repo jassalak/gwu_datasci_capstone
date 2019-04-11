@@ -147,13 +147,12 @@ series.index = np.where(series.index.isin(series[mask].index),'Other',series.ind
 ################################################################################
 df2 = df1b.copy(deep = True)
 
-df2 = pd.get_dummies(df1b,columns = ['PT GENDER','PT STATE','PCP SPECIALTY','PT INS','CPT','AGE_BIN'], \
-                     prefix = ['Gndr','State','Spclty','Ins','CPT','Age'])
+df2 = df2.drop(['PT RACE','PT_AGE'],axis =1)
+df2 = pd.get_dummies(df2,columns = ['PT GENDER','PT STATE','PCP SPECIALTY','PT INS','CPT','AGE_BIN'], prefix = ['Gndr','State','Spclty','Ins','CPT','Age'])
 print(df2.dtypes)
 
-
-df2_qual = df2.select_dtypes(include=['object']).copy()
-df2_quant = df2.select_dtypes(include=['int64','uint8']).copy()
+print( 'qualitive variables', df2.select_dtypes(include=['object']).copy() )
+print( 'quantative variables',  df2.select_dtypes(include=['int64','uint8']).copy().head(10) )
 
 df2_feats = list(df2)
 print(df2.groupby('FLUDX_YES').mean() )
@@ -163,62 +162,73 @@ print(df2.groupby('FLUDX_YES').mean() )
 
 ### df2 -- regular and smote
 
-x = df2.drop(['FLUDX_YES','PT RACE','PT_AGE'],axis = 1 ).astype(float)
-y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
+df2_x = df2.drop(['FLUDX_YES'],axis = 1 ).astype(float)
+df2_y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
 
-x_train, x_test, y_train, y_test = tts(x, y, test_size=0.3, random_state=5026)
+df2_x_train, df2_x_test, df2_y_train, df2_y_test = tts(df2_x, df2_y, test_size=0.3, random_state=5026)
 
-print("Shape of x_train dataset: ", x_train.shape)
-print("Shape of y_train dataset: ", y_train.shape)
-print("Shape of x_test dataset: ", x_test.shape)
-print("Shape of y_test dataset: ", y_test.shape)
+print("Shape of x_train dataset: ", df2_x_train.shape)
+print("Shape of y_train dataset: ", df2_y_train.shape)
+print("Shape of x_test dataset: ", df2_x_test.shape)
+print("Shape of y_test dataset: ", df2_y_test.shape)
 
 sm = SMOTE(random_state=5026)
-x_train_smote, y_train_smote = sm.fit_sample(x_train, y_train.values.ravel())
-print('Resampled dataset shape %s' % Counter(y_train_smote))
-traincols = list(x)
-x_train_smote = pd.DataFrame(data=x_train_smote, columns = traincols).reset_index(drop = True)
+df2_x_train_smote, df2_y_train_smote = sm.fit_sample(df2_x_train, df2_y_train.values.ravel())
+print('Resampled dataset shape %s' % Counter(df2_y_train_smote))
+traincols_df2 = list(df2_x)
+df2_x_train_smote = pd.DataFrame(data=df2_x_train_smote, columns = traincols_df2).reset_index(drop = True)
 
-y_train_smote = pd.DataFrame(data = y_train_smote).reset_index(drop = True)
-y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
+df2_y_train_smote = pd.DataFrame(data = df2_y_train_smote).reset_index(drop = True)
+df2_y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
 
-df2smote_train = x_train_smote.join(y_train_smote)
-df2_test = x_test.join(y_test)
+df2smote_train = df2_x_train_smote.join(df2_y_train_smote)
+df2_test = df2_x_test.join(df2_y_test)
 df2smote = pd.concat([df2smote_train,df2_test])
 df2smote.shape
 
-df2smote.to_excel("df2smote.xlsx")
+#df2smote.to_excel("df2smote.xlsx")
 
 ################################################################################
-# DF3 # NOT USING PCA ANYMORE
+# df3 (correlation) -- regular and smote
 
 # Feature Selection using Correlation Rank
  #https://blog.datadive.net/selecting-good-features-part-iii-random-forests/
 
-print("Find most important features relative to DV")
-df2_corr = df2.corr()
+df2_corr = df2.corr()               # defaults to Pearson
 df2_corr.sort_values(["FLUDX_YES"], ascending = False, inplace = True)
-print(df2_corr.FLUDX_YES)
-df2_feats = list(df2)
+print("Find most important features relative to DV:", df2_corr.FLUDX_YES)
 
-corr_traincols=['Age_1','Spclty_Pediatrics','CPT_90686', 'CPT_90685','Ins_CIGNA','State_VA','Ins_MCAID','Ins_BCBS','Gndr_M', 'Ins_TRICARE']
+traincols_df3= ['FLUDX_YES','Spclty_Pediatrics','Age_Child','Age_Baby','CPT_90686',
+                'Age_Senior','Age_Adult','Spclty_Family Practice', 'Spclty_Other']  # corr > abs(.03)
 
-df3 = df2_quant.copy(deep = True)
-df3 = df3[corr_traincols].astype(float)
+df3 = df2[traincols_df3].astype(float)
+print(df3.shape)                                                                # Inspect shape of the `reduced_data`
 
-# Build the model
-#pca = PCA(n_components=30)
-# Reduce the data, output is ndarray
-#df3 = pca.fit_transform(df3)
+df3_x = df3.drop(['FLUDX_YES'],axis = 1 ).astype(float)
+df3_y = pd.DataFrame(df3['FLUDX_YES'].astype(float))
+
+###
+
+df3_x_train, df3_x_test, df3_y_train, df3_y_test = tts(df3_x, df3_y, test_size=0.3, random_state=5026)
+
+print("Shape of x_train dataset: ", df3_x_train.shape)
+print("Shape of y_train dataset: ", df3_y_train.shape)
+print("Shape of x_test dataset: ", df3_x_test.shape)
+print("Shape of y_test dataset: ", df3_y_test.shape)
+
+sm = SMOTE(random_state=5026)
+df3_x_train_smote, df3_y_train_smote = sm.fit_sample(df3_x_train, df3_y_train.values.ravel())
+print('Resampled dataset shape %s' % Counter(df3_y_train_smote))
+traincols = list(df3_x)
+df3_x_train_smote = pd.DataFrame(data=df3_x_train_smote, columns = traincols).reset_index(drop = True)
+
+df3_y_train_smote = pd.DataFrame(data = df3_y_train_smote).reset_index(drop = True)
+df3_y_train_smote.rename(columns={0:'FLUDX_YES'}, inplace=True)
 
 
-# Inspect shape of the `reduced_data`
-df3.shape
 
-# print out the reduced data
-#print(df3)
 
-df3 = pd.DataFrame(data=df3, columns = corr_traincols).reset_index(drop = True)
+#df3 = pd.DataFrame(data=df3, columns = traincols_df3).reset_index(drop = True)
 ################################################################################
 
 ### SMOTE (df3)
