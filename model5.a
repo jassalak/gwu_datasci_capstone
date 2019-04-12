@@ -199,7 +199,7 @@ df2_corr.sort_values(["FLUDX_YES"], ascending = False, inplace = True)
 print("Find most important features relative to DV:", df2_corr.FLUDX_YES)
 
 traincols_df3= ['FLUDX_YES','Spclty_Pediatrics','Age_Child','Age_Baby','CPT_90686',
-                'Age_Senior','Age_Adult','Spclty_Family Practice', 'Spclty_Other']  # corr > abs(.03)
+                'Ins_CIGNA','State_VA','Ins_BCBS', 'Gndr_M']  # corr > 0
 
 df3 = df2[traincols_df3].astype(float)
 print(df3.shape)                                                                # Inspect shape of the `reduced_data`
@@ -338,16 +338,55 @@ sns.distplot(df2['FLUDX_YES'], kde=False, fit=st.norm)
 plt.figure(3); plt.title('Normal')
 sns.distplot(df2smote['FLUDX_YES'], kde=False, fit=st.norm)
 ################################################################################
-#### Logistic Regression (sklearn) DF2
-#df3 = df2_quant.copy(deep = False)
-# prepare X and y
-#x = df3.drop(['FLUDX_YES','UNITS','PTAGE'],axis=1,inplace=False) # PATIENT AGE!!!!!!!!!!!!!!!!!
-#y = df3[['FLUDX_YES']]
 
-#x_train, x_test, y_train, y_test =tts(x, y, test_size = 0.3, random_state=5026)
+## DataSets
+
+# df2 regular
+x_train = df2_x_train
+y_train = df2_y_train
+x_test = df2_x_test
+y_test = df2_y_test
+
+# df2 smote
+x_train = df2_x_train_smote
+y_train = df2_y_train_smote
+
+# df3 regular
+x_train = df3_x_train
+y_train = df3_y_train
+x_test = df3_x_test
+y_test = df3_y_test
+
+# df3 smote
+x_train = df2_x_train_smote
+y_train = df2_y_train_smote
+
+# df4 regular
+x_train = df4_x_train
+y_train = df4_y_train
+x_test = df4_x_test
+y_test = df4_y_test
+
+# df4 smote
+x_train = df4_x_train_smote
+y_train = df4_y_train_smote
+
+# df5 regular
+x_train = df5_x_train
+y_train = df5_y_train
+x_test = df5_x_test
+y_test = df5_y_test
+
+# df5 smote
+x_train = df5_x_train_smote
+y_train = df5_y_train_smote
+
+####
+
+#### Logistic Regression (sklearn)
 
 logit = LogisticRegression()
-result = logit.fit(x_train,y_train)
+result= logit.fit(x_train,y_train)
 #print(result.summary())
 
 logit_yhat = logit.predict(x_test)
@@ -356,15 +395,14 @@ logit_ci90 = (np.percentile(logit_prob[:,1],90))
 logit_threshold = logit_ci90
 logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
 
-
-logit_score =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(y_test, logit_yhat) ) #0.8584547181760608
+logit_accuracy =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
+print('\n Accuracy logit:', metrics.accuracy_score(y_test, logit_yhat) )
 #print(' \n Intercept logit: ',logit.intercept_)
 logit_coef = pd.DataFrame(logit.coef_[0], x_test.columns, columns=['logit_Coefficients'])
 logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
 print('\n Confusion Matrix logit SMOTE: \n',logit_confusion_matrix)
 logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
-print('\n AUC: \n', logit_auc)  #0.568841245785207
+print('\n AUC: \n', logit_auc)
 
 ### Evaluation Metrics
 tn = logit_confusion_matrix.iloc[0,0]
@@ -374,191 +412,45 @@ tp = logit_confusion_matrix.iloc[1,1]
 sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
 specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
 ################################################################################
-#### Logistic Regression (sklearn) DF3
-#df3 = df2_quant.copy(deep = False)
-# prepare X and y
-#x = df3.drop(['FLUDX_YES','UNITS','PTAGE'],axis=1,inplace=False) # PATIENT AGE!!!!!!!!!!!!!!!!!
-#y = df3[['FLUDX_YES']]
+# Random Forest Model
 
-#x_train, x_test, y_train, y_test =tts(x, y, test_size = 0.3, random_state=5026)
+tree = RandomForestClassifier(random_state=5026)
+tree.fit(x_train, y_train)
 
-logit = LogisticRegression()
-result = logit.fit(x_train,y_train)
-#print(result.summary())
+tree_yhat = tree.predict(x_test)                                                # Predict on training set
 
-logit_yhat = logit.predict(x_test)
-logit_prob = logit.predict_proba(x_test)
-logit_ci90 = (np.percentile(logit_prob[:,1],90))
-logit_threshold = logit_ci90
-logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
+tree_accuracy = metrics.accuracy_score(y_test, tree_yhat)
+print( '\n Accuracy Tree: \n', tree_accuracy )
 
+tree_prob = tree.predict_proba(x_test)
+tree_prob = [p[1] for p in tree_prob]
+tree_auc = roc_auc_score(y_test, tree_prob)
+print( '\n AUC Tree: \n', tree_auc )
 
-logit_score =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(y_test, logit_yhat) ) #0.880050664977834
-#print(' \n Intercept logit: ',logit.intercept_)
-logit_coef = pd.DataFrame(logit.coef_[0], x_test.columns, columns=['logit_Coefficients'])
-logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix logit SMOTE: \n',logit_confusion_matrix)
-logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
-print('\n AUC: \n', logit_auc)  #  0.558901607998342
+######
 
-### Evaluation Metrics
-tn = logit_confusion_matrix.iloc[0,0]
-fp = logit_confusion_matrix.iloc[0,1]
-fn = logit_confusion_matrix.iloc[1,0]
-tp = logit_confusion_matrix.iloc[1,1]
-sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
-specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+class_wgts = {i: 1 for i in y_train}
+class_wgts[1] = 10
+class_wgts[0] = 1
+class_wgts.pop('FLUDX_YES')
+
+tree_wgt = RandomForestClassifier(class_weight = class_wgts, random_state=5026)
+tree_wgt.fit(x_train, y_train)
+
+tree_wgt_yhat = tree_wgt.predict(x_test)                                                # Predict on training set
+
+tree_wgt_accuracy = metrics.accuracy_score(y_test, tree_wgt_yhat)
+print( '\n Accuracy Weighted Tree: \n',tree_wgt_accuracy )
+
+tree_wgt_prob = tree_wgt.predict_proba(x_test)
+tree_wgt_prob = [p[1] for p in tree_wgt_prob]
+tree_wgt_auc = roc_auc_score(y_test, tree_wgt_prob)
+print( '\n AUC Weighted Tree: \n', tree_wgt_auc )
 ################################################################################
 
-#### Logistic Regression (sklearn) DF4
-#df3 = df2_quant.copy(deep = False)
-# prepare X and y
-#x = df3.drop(['FLUDX_YES','UNITS','PTAGE'],axis=1,inplace=False) # PATIENT AGE!!!!!!!!!!!!!!!!!
-#y = df3[['FLUDX_YES']]
-
-#x_train, x_test, y_train, y_test =tts(x, y, test_size = 0.3, random_state=5026)
-
-logit = LogisticRegression()
-result = logit.fit(x_train,y_train)
-#print(result.summary())
-
-logit_yhat = logit.predict(x_test)
-logit_prob = logit.predict_proba(x_test)
-logit_ci90 = (np.percentile(logit_prob[:,1],90))
-logit_threshold = logit_ci90
-logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
 
 
-logit_score =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(y_test, logit_yhat) ) #0.8235592146928435
-#print(' \n Intercept logit: ',logit.intercept_)
-logit_coef = pd.DataFrame(logit.coef_[0], x_test.columns, columns=['logit_Coefficients'])
-logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix logit SMOTE: \n',logit_confusion_matrix)
-logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
-print('\n AUC: \n', logit_auc)  #  0.584751342
 
-### Evaluation Metrics
-tn = logit_confusion_matrix.iloc[0,0]
-fp = logit_confusion_matrix.iloc[0,1]
-fn = logit_confusion_matrix.iloc[1,0]
-tp = logit_confusion_matrix.iloc[1,1]
-sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
-specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
-################################################################################
-#### Logistic Regression (sklearn) SMOTE df2
-#df3 = df2_quant.copy(deep = False)
-
-# prepare X and y
-#x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
-#y = df3[['FLUDX_YES']]
-
-#x_train, x_test, y_train, y_test =tts(x, y, test_size = 0.3, random_state=5026)
-
-
-logit = LogisticRegression()
-result = logit.fit(x_train_smote,y_train_smote)
-
-logit_yhat = logit.predict(x_test)
-logit_prob = logit.predict_proba(x_test)
-logit_ci90 = (np.percentile(logit_prob[:,1],90))
-logit_threshold = logit_ci90
-logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
-
-
-logit_score =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(y_test, logit_yhat) ) #0.8560481317289423
-#print(' \n Intercept logit: ',logit.intercept_)
-logit_coef = pd.DataFrame(logit.coef_[0], x_test.columns, columns=['logit_Coefficients'])
-logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
-logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
-print('\n AUC: \n', logit_auc) #0.5575
-
-### Evaluation Metrics
-tn = logit_confusion_matrix.iloc[0,0]
-fp = logit_confusion_matrix.iloc[0,1]
-fn = logit_confusion_matrix.iloc[1,0]
-tp = logit_confusion_matrix.iloc[1,1]
-sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
-specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
-################################################################################
-
-#### Logistic Regression (sklearn) SMOTE df3
-#df3 = df2_quant.copy(deep = False)
-
-# prepare X and y
-#x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
-#y = df3[['FLUDX_YES']]
-
-#x_train, x_test, y_train, y_test =tts(x, y, test_size = 0.3, random_state=5026)
-
-
-logit = LogisticRegression()
-result = logit.fit(x_train_smote,y_train_smote)
-
-logit_yhat = logit.predict(x_test)
-logit_prob = logit.predict_proba(x_test)
-logit_ci90 = (np.percentile(logit_prob[:,1],90))
-logit_threshold = logit_ci90
-logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
-
-
-logit_score =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(y_test, logit_yhat) ) #0.8797973400886637
-#print(' \n Intercept logit: ',logit.intercept_)
-logit_coef = pd.DataFrame(logit.coef_[0], x_test.columns, columns=['logit_Coefficients'])
-logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
-logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
-print('\n AUC: \n', logit_auc) #0.550510259
-
-### Evaluation Metrics
-tn = logit_confusion_matrix.iloc[0,0]
-fp = logit_confusion_matrix.iloc[0,1]
-fn = logit_confusion_matrix.iloc[1,0]
-tp = logit_confusion_matrix.iloc[1,1]
-sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
-specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
-################################################################################
-
-#### Logistic Regression (sklearn) SMOTE df4
-#df3 = df2_quant.copy(deep = False)
-
-# prepare X and y
-#x = df3.drop(['FLUDX_YES','UNITS'],axis=1,inplace=False)
-#y = df3[['FLUDX_YES']]
-
-#x_train, x_test, y_train, y_test =tts(x, y, test_size = 0.3, random_state=5026)
-
-
-logit = LogisticRegression()
-result = logit.fit(x_train_smote,y_train_smote)
-
-logit_yhat = logit.predict(x_test)
-logit_prob = logit.predict_proba(x_test)
-logit_ci90 = (np.percentile(logit_prob[:,1],90))
-logit_threshold = logit_ci90
-logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
-
-
-logit_score =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
-print('\n Score logit:', metrics.accuracy_score(y_test, logit_yhat) ) #0.8310956301456618
-#print(' \n Intercept logit: ',logit.intercept_)
-logit_coef = pd.DataFrame(logit.coef_[0], x_test.columns, columns=['logit_Coefficients'])
-logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-print('\n Confusion Matrix logit: \n',logit_confusion_matrix)
-logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
-print('\n AUC: \n', logit_auc) #0.5785534541374721
-
-### Evaluation Metrics
-tn = logit_confusion_matrix.iloc[0,0]
-fp = logit_confusion_matrix.iloc[0,1]
-fn = logit_confusion_matrix.iloc[1,0]
-tp = logit_confusion_matrix.iloc[1,1]
-sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
-specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
 ################################################################################
 
 #df2
@@ -726,179 +618,6 @@ svc_prob = svc.predict_proba(x_test)
 svc_prob = [p[1] for p in svc_prob]
 print( roc_auc_score(y_test, svc_prob) ) #0.661868789906019
 ##############################################################################
-
-# Tree Model --> df2
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-class_wgts = {i: 1 for i in y_train}
-class_wgts[1] = 10
-class_wgts[0] = 1
-class_wgts.pop('FLUDX_YES')
-
-# Train model
-tree = RandomForestClassifier( class_weight = class_wgts, random_state=5026)
-tree.fit(x_train, y_train)
-
-# Predict on training set
-tree_yhat = tree.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( tree_yhat ) )
-
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, tree_yhat) ) # 0.966624445851805
-
-
-# What about AUROC?
-tree_prob = tree.predict_proba(x_test)
-tree_prob = [p[1] for p in tree_prob]
-print( roc_auc_score(y_test, tree_prob) ) # 0.6793665953240706
-
-
-################################################################################
-# Tree Model --> SMOTE df2
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-tree = RandomForestClassifier()
-tree.fit(x_train_smote, y_train_smote)
-
-# Predict on training set
-tree_yhat = tree.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( tree_yhat ) )
-
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, tree_yhat) ) # 0.5980367321089297
-
-
-# What about AUROC?
-tree_prob = tree.predict_proba(x_test)
-tree_prob = [p[1] for p in tree_prob]
-print( roc_auc_score(y_test, tree_prob) ) # 0.673525358008306
-
-
-################################################################################
-
-# Tree Model --> df3
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-tree = RandomForestClassifier()
-tree.fit(x_train, y_train)
-
-# Predict on training set
-tree_yhat = tree.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( tree_yhat ) )
-
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, tree_yhat) ) #0.966624446
-
-# What about AUROC?
-tree_prob = tree.predict_proba(x_test)
-tree_prob = [p[1] for p in tree_prob]
-print( roc_auc_score(y_test, tree_prob) ) # 0.683327554
-
-################################################################################
-
-# Tree Model --> SMOTE df3
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-tree = RandomForestClassifier()
-tree.fit(x_train_smote, y_train_smote)
-
-# Predict on training set
-tree_yhat = tree.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( tree_yhat ) )
-
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, tree_yhat) ) # 0.6377454084863838
-
-
-# What about AUROC?
-tree_prob = tree.predict_proba(x_test)
-tree_prob = [p[1] for p in tree_prob]
-print( roc_auc_score(y_test, tree_prob) ) # 0.6811904523479286
-
-
-################################################################################
-
-################################################################################
-
-# Tree Model --> df4
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-tree = RandomForestClassifier()
-tree.fit(x_train, y_train)
-
-# Predict on training set
-tree_yhat = tree.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( tree_yhat ) )
-
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, tree_yhat) ) #0.9664344521849272
-
-# What about AUROC?
-tree_prob = tree.predict_proba(x_test)
-tree_prob = [p[1] for p in tree_prob]
-print( roc_auc_score(y_test, tree_prob) ) # 0.6912616155909479
-
-################################################################################
-
-# Tree Model --> SMOTE df4
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-tree = RandomForestClassifier()
-tree.fit(x_train_smote, y_train_smote)
-
-# Predict on training set
-tree_yhat = tree.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( tree_yhat ) )
-
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, tree_yhat) ) # 0.5394553514882837
-
-
-# What about AUROC?
-tree_prob = tree.predict_proba(x_test)
-tree_prob = [p[1] for p in tree_prob]
-print( roc_auc_score(y_test, tree_prob) ) # 0.661868789906019
-
-
-################################################################################
-
-
-
 
 
 
