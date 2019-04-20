@@ -22,10 +22,11 @@ from sklearn import metrics
 from sklearn.model_selection import train_test_split as tts
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
+from sklearn.metrics import f1_score
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestClassifier
+
 
 import datetime as DT
 from imblearn.over_sampling import SMOTE
@@ -34,6 +35,7 @@ from collections import Counter
 from pandas.plotting import scatter_matrix
 from datetime import datetime
 from datetime import date
+from sklearn.svm import SVC
 from sklearn.metrics import confusion_matrix
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -146,6 +148,7 @@ series.index = np.where(series.index.isin(series[mask].index),'Other',series.ind
 
 ################################################################################
 df2 = df1b.copy(deep = True)
+df2_feats = list(df2)
 
 df2 = df2.drop(['PT RACE','PT_AGE'],axis =1)
 df2 = pd.get_dummies(df2,columns = ['PT GENDER','PT STATE','PCP SPECIALTY','PT INS','CPT','AGE_BIN'], prefix = ['Gndr','State','Spclty','Ins','CPT','Age'])
@@ -200,6 +203,10 @@ print("Find most important features relative to DV:", df2_corr.FLUDX_YES)
 
 traincols_df3= ['FLUDX_YES','Spclty_Pediatrics','Age_Child','Age_Baby','CPT_90686',
                 'Ins_CIGNA','State_VA','Ins_BCBS', 'Gndr_M']  # corr > 0
+
+#df3b
+#traincols_df3 =['FLUDX_YES','Spclty_Pediatrics','Age_Child','Age_Baby','CPT_90686',
+#                'Age_Senior','Age_Adult','Spclty_Family Practice','Spclty_Other'] # cor > abs(.3)
 
 df3 = df2[traincols_df3].astype(float)
 print(df3.shape)                                                                # Inspect shape of the `reduced_data`
@@ -395,6 +402,7 @@ logit_ci90 = (np.percentile(logit_prob[:,1],90))
 logit_threshold = logit_ci90
 logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
 
+### Evaluation Metrics
 logit_accuracy =  round(metrics.accuracy_score(y_test, logit_yhat)*100,2)
 print('\n Accuracy logit:\n', metrics.accuracy_score(y_test, logit_yhat) )
 #print(' \n Intercept logit: ',logit.intercept_)
@@ -403,14 +411,16 @@ logit_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, logit_yha
 print('\n Confusion Matrix logit SMOTE: \n',logit_confusion_matrix)
 logit_auc = metrics.roc_auc_score(y_test, logit_yhat)
 print('\n AUC: \n', logit_auc)
+logit_f1 = f1_score(y_test, logit_yhat)
+print('\n F_Score: \n', (logit_f1))
 
-### Evaluation Metrics
 tn = logit_confusion_matrix.iloc[0,0]
 fp = logit_confusion_matrix.iloc[0,1]
 fn = logit_confusion_matrix.iloc[1,0]
 tp = logit_confusion_matrix.iloc[1,1]
 sensitivity = tp/(tp+fn)*100                                                    #print(sensitivity) # this percent... of all True values, the model was able to predict
 specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
+
 ################################################################################
 # Random Forest Model
 
@@ -418,6 +428,9 @@ tree = RandomForestClassifier(random_state=5026)
 tree.fit(x_train, y_train)
 
 tree_yhat = tree.predict(x_test)                                                # Predict on training set
+
+tree_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, tree_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+print('\n Confusion Matrix Tree \n',tree_confusion_matrix)
 
 tree_accuracy = metrics.accuracy_score(y_test, tree_yhat)
 print( '\n Accuracy Tree: \n', tree_accuracy )
@@ -427,17 +440,22 @@ tree_prob = [p[1] for p in tree_prob]
 tree_auc = roc_auc_score(y_test, tree_prob)
 print( '\n AUC Tree: \n', tree_auc )
 
+tree_f1 = f1_score(y_test, tree_yhat)
+print('\n F_Score: \n', tree_f1)
 ######
 
 class_wgts = {i: 1 for i in y_train}
 class_wgts[1] = 1
-class_wgts[0] = 10
+class_wgts[0] = 5
 class_wgts.pop('FLUDX_YES')
 
 tree_wgt = RandomForestClassifier(class_weight = class_wgts, random_state=5026)
 tree_wgt.fit(x_train, y_train)
 
 tree_wgt_yhat = tree_wgt.predict(x_test)                                                # Predict on training set
+
+tree_wgt_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, tree_wgt_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
+print('\n Confusion Matrix Weighted Tree \n',tree_wgt_confusion_matrix)
 
 tree_wgt_accuracy = metrics.accuracy_score(y_test, tree_wgt_yhat)
 print( '\n Accuracy Weighted Tree: \n',tree_wgt_accuracy )
@@ -446,178 +464,14 @@ tree_wgt_prob = tree_wgt.predict_proba(x_test)
 tree_wgt_prob = [p[1] for p in tree_wgt_prob]
 tree_wgt_auc = roc_auc_score(y_test, tree_wgt_prob)
 print( '\n AUC Weighted Tree: \n', tree_wgt_auc )
+
+tree_wgt_f1 = f1_score(y_test, tree_wgt_yhat)
+print('\n F_Score: \n', tree_f1)
 ################################################################################
 
 
 
 
-################################################################################
-
-#df2
-# SVC -->  https://elitedatascience.com/imbalanced-classes
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-svc = SVC(kernel='linear',
-            class_weight='balanced', # penalize
-            probability=True)
-
-svc.fit(x_train, y_train)
-
-# Predict on training set
-svc_yhat = svc.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( svc_yhat ) )
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, svc_yhat) ) # 0.5836605446485117
-
-# What about AUROC?
-svc_prob = svc.predict_proba(x_test)
-svc_prob = [p[1] for p in svc_prob]
-print( roc_auc_score(y_test, svc_prob) ) # 0.6473181635658544
-
-################################################################################
-#df3
-# SVC -->  https://elitedatascience.com/imbalanced-classes
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-svc = SVC(kernel='linear',
-            class_weight='balanced', # penalize
-            probability=True)
-
-svc.fit(x_train, y_train)
-
-# Predict on training set
-svc_yhat = svc.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( svc_yhat ) )
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, svc_yhat) ) #0.5300823305889804
-
-# What about AUROC?
-svc_prob = svc.predict_proba(x_test)
-svc_prob = [p[1] for p in svc_prob]
-print( roc_auc_score(y_test, svc_prob) ) #0.6780682796470335
-
-##############################################################################
-#df4
-# SVC -->  https://elitedatascience.com/imbalanced-classes
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-svc = SVC(kernel='linear',
-            class_weight='balanced', # penalize
-            probability=True)
-
-svc.fit(x_train, y_train)
-
-# Predict on training set
-svc_yhat = svc.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( svc_yhat ) )
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, svc_yhat) ) #0.5300823305889804
-
-# What about AUROC?
-svc_prob = svc.predict_proba(x_test)
-svc_prob = [p[1] for p in svc_prob]
-print( roc_auc_score(y_test, svc_prob) ) #0.6764161779300285
-
-##############################################################################
-# SVC -->  SMOTE DF2
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-svc = SVC(kernel='linear',
-            class_weight='balanced', # penalize
-            probability=True)
-
-svc.fit(x_train_smote, y_train_smote)
-
-# Predict on training set
-svc_yhat = svc.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( svc_yhat ) )
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, svc_yhat) ) # 0.6051931602279924
-
-# What about AUROC?
-svc_prob = svc.predict_proba(x_test)
-svc_prob = [p[1] for p in svc_prob]
-print( roc_auc_score(y_test, svc_prob) ) # 0.6462403024886211
-
-################################################################################
-
-# SVC -->  SMOTE DF3
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-svc = SVC(kernel='linear',
-            class_weight='balanced', # penalize
-            probability=True)
-
-svc.fit(x_train_smote, y_train_smote)
-
-# Predict on training set
-svc_yhat = svc.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( svc_yhat ) )
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, svc_yhat) ) #
-
-# What about AUROC?
-svc_prob = svc.predict_proba(x_test)
-svc_prob = [p[1] for p in svc_prob]
-print( roc_auc_score(y_test, svc_prob) ) #
-##############################################################################
-
-# SVC -->  SMOTE DF4
-# Separate input features (X) and target variable (y)
-#y = df.balance
-#X = df.drop('balance', axis=1)
-
-# Train model
-svc = SVC(kernel='linear',
-            class_weight='balanced', # penalize
-            probability=True)
-
-svc.fit(x_train_smote, y_train_smote)
-
-# Predict on training set
-svc_yhat = svc.predict(x_test)
-
-# Is our model still predicting just one class?
-print( np.unique( svc_yhat ) )
-
-# How's our accuracy?
-print( metrics.accuracy_score(y_test, svc_yhat) ) #0.5394553514882837
-
-# What about AUROC?
-svc_prob = svc.predict_proba(x_test)
-svc_prob = [p[1] for p in svc_prob]
-print( roc_auc_score(y_test, svc_prob) ) #0.661868789906019
-##############################################################################
 
 
 
