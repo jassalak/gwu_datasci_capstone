@@ -151,7 +151,7 @@ new = series[~mask]
 new['Other'] = series[mask].sum()
 series.index = np.where(series.index.isin(series[mask].index),'Other',series.index)
 
-#df1b.to_excel("df1b.xlsx")
+#df1b.to_excel("df1b_2.xlsx")
 
 ################################################################################
 df2 = df1b.copy(deep = True)
@@ -168,6 +168,7 @@ print( 'quantative variables',  df2.select_dtypes(include=['int64','uint8']).cop
 print(df2.groupby('FLUDX_YES').mean() )
 
 df2_feats = list(df2)
+print(df2['FLUDX_YES'].value_counts())
 
 #df2.to_excel("df2.xlsx")
 ################################################################################
@@ -203,6 +204,9 @@ df2smote_train = df2_x_train_smote.join(df2_y_train_smote)
 df2_test = df2_x_test.join(df2_y_test)
 df2smote = pd.concat([df2smote_train,df2_test])
 df2smote.shape
+
+print(df2_y_train['FLUDX_YES'].value_counts())
+print(df2_y_train_smote['FLUDX_YES'].value_counts())
 
 #df2smote.to_excel("df2smote.xlsx")
 
@@ -441,8 +445,8 @@ specificity = tn / (tn + fp) *100                                               
 ################################################################################
 # Random Forest Model -- Regular / SMOTE
 
-tree = RandomForestClassifier(random_state=5026)
-#tree = RandomForestClassifier(class_weight = 'balanced', random_state=5026)
+#tree = RandomForestClassifier(random_state=5026)
+tree = RandomForestClassifier(class_weight = 'balanced', random_state=5026)
 
 tree.fit(x_train, y_train)
 
@@ -467,6 +471,23 @@ tree_f1 = f1_score(y_test, tree_yhat)
 print('\n F_Score: \n', tree_f1)
 ################################################################################
 
+#Plotting ROC Curve -- Not Correct AUC SCORES!!!!
+
+logit_fpr, logit_tpr, _ = metrics.roc_curve(y_test, logit_yhat)
+logit_auc = round(metrics.roc_auc_score(y_test, logit_yhat),3)
+tree_fpr, tree_tpr, _ = metrics.roc_curve(y_test, tree_yhat)
+tree_auc= round(metrics.roc_auc_score(y_test, tree_yhat),3)
+plt.plot(logit_fpr,logit_tpr,label="Logistic: auc = "+str(logit_auc))
+plt.plot(tree_fpr,tree_tpr,label="RandomForest: auc = "+str(tree_auc))
+plt.plot([0, 1], [0, 1],'k--')
+plt.legend(loc='lower right')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Postiive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve \n Logistic-OverSampling vs RandomForest-ClassWeights')
+plt.show
+
+
+################################################################################
 ## Random Forest Model -- Regular / SMOTE
 #
 ##class_wgts = {i: 1 for i in y_train}
@@ -504,10 +525,30 @@ print('\n F_Score: \n', tree_f1)
 ##df2_yes_corr.sort_values(["FLUDX_YES"], ascending = False, inplace = True)
 ##print("Find most important features relative to DV:", df2_yes_corr.FLUDX_YES)
 
+################################################################################
 
+#### Logistic Regression (statsmodel)
+#
+#
+#### Value Counts
+#for f in df2.columns:
+#    print(df2[f].value_counts())
+#
+#
+#traincols = ['FLUDX_YES','Gndr_F','Gndr_M','State_Other','State_VA',
+#             'Spclty_Family Practice','Spclty_Other','Spclty_Pediatrics',
+#             'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_Other','Ins_UNITED',
+#             'Zip_20132','Zip_20141','Zip_20147','Zip_20148','Zip_20164',
+#             'Zip_20165','Zip_20175','Zip_20176','Zip_20180','Zip_Other',
+#             'Age_Baby','Age_Child','Age_Adult','Age_Senior']
+#y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
+#x = df2[traincols].astype(float)
+#
+#logit = Logit(y,x)
+#result = logit.fit()
+#print(result.summary())
 
-
-
+################################################################################
 
 
 
