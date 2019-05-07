@@ -377,36 +377,6 @@ y_test = df2_y_test
 x_train = df2_x_train_smote
 y_train = df2_y_train_smote
 
-# df3 regular
-x_train = df3_x_train
-y_train = df3_y_train
-x_test = df3_x_test
-y_test = df3_y_test
-
-# df3 smote
-x_train = df3_x_train_smote
-y_train = df3_y_train_smote
-
-# df4 regular
-x_train = df4_x_train
-y_train = df4_y_train
-x_test = df4_x_test
-y_test = df4_y_test
-
-# df4 smote
-x_train = df4_x_train_smote
-y_train = df4_y_train_smote
-
-# df5 regular
-x_train = df5_x_train
-y_train = df5_y_train
-x_test = df5_x_test
-y_test = df5_y_test
-
-# df5 smote
-x_train = df5_x_train_smote
-y_train = df5_y_train_smote
-
 ################################################################################
 #### Logistic Regression -- Regular / SMOTED
 
@@ -441,8 +411,6 @@ sensitivity = tp/(tp+fn)*100                                                    
 specificity = tn / (tn + fp) *100                                               #print(specificity) # this percent... of all False values, the model was able to predict
 
 ################################################################################
-
-################################################################################
 # Random Forest Model -- Regular / SMOTE
 
 #tree = RandomForestClassifier(random_state=5026)
@@ -471,14 +439,36 @@ tree_f1 = f1_score(y_test, tree_yhat)
 print('\n F_Score: \n', tree_f1)
 ################################################################################
 
-#Plotting ROC Curve -- Not Correct AUC SCORES!!!!
+#Plotting ROC Curve
+
+logit = LogisticRegression(random_state = 5026)
+result= logit.fit(df2_x_train_smote,df2_y_train_smote)
+logit_yhat = logit.predict(x_test)
+
+logit_yhat = logit.predict(x_test)
+logit_prob = logit.predict_proba(x_test)
+logit_ci90 = (np.percentile(logit_prob[:,1],90))
+logit_threshold = logit_ci90
+logit_yhat = np.where(logit_prob[:,1] >= logit_threshold,1,0)
 
 logit_fpr, logit_tpr, _ = metrics.roc_curve(y_test, logit_yhat)
 logit_auc = round(metrics.roc_auc_score(y_test, logit_yhat),3)
+print(logit_auc)
+
+tree = RandomForestClassifier(class_weight = 'balanced', random_state=5026)
+tree.fit(df2_x_train, df2_y_train)
+tree_prob = tree.predict_proba(x_test)
+tree_ci90 = (np.percentile(tree_prob[:,1],90))
+tree_threshold = tree_ci90
+tree_yhat = np.where(tree_prob[:,1] >= tree_threshold,1,0)
+
 tree_fpr, tree_tpr, _ = metrics.roc_curve(y_test, tree_yhat)
-tree_auc= round(metrics.roc_auc_score(y_test, tree_yhat),3)
-plt.plot(logit_fpr,logit_tpr,label="Logistic: auc = "+str(logit_auc))
-plt.plot(tree_fpr,tree_tpr,label="RandomForest: auc = "+str(tree_auc))
+tree_prob = [p[1] for p in tree_prob]
+tree_auc= round(metrics.roc_auc_score(y_test, tree_prob),3)
+print(tree_auc)
+
+plt.plot(logit_fpr,logit_tpr,label="Logistic-OS: auc = "+str(logit_auc))
+plt.plot(tree_fpr,tree_tpr,label="RandomForest-CW: auc = "+str(tree_auc))
 plt.plot([0, 1], [0, 1],'k--')
 plt.legend(loc='lower right')
 plt.xlabel('False Positive Rate')
@@ -486,75 +476,7 @@ plt.ylabel('True Postiive Rate')
 plt.title('Receiver Operating Characteristic (ROC) Curve \n Logistic-OverSampling vs RandomForest-ClassWeights')
 plt.show
 
-
 ################################################################################
-## Random Forest Model -- Regular / SMOTE
-#
-##class_wgts = {i: 1 for i in y_train}
-##class_wgts[0] = 1
-##class_wgts[1] = 23
-##class_wgts.pop('FLUDX_YES')
-#
-#tree_wgt.fit(x_train, y_train)
-#
-#tree_wgt_prob = tree_wgt.predict_proba(x_test)
-#tree_wgt_ci90 = (np.percentile(tree_wgt_prob[:,1],90))
-#tree_wgt_threshold = tree_ci90
-#tree_wgt_yhat = np.where(tree_wgt_prob[:,1] >= tree_wgt_threshold,1,0)
-#
-#
-#tree_wgt_confusion_matrix = pd.DataFrame(metrics.confusion_matrix(y_test, tree_wgt_yhat), columns=['predicted 0','predicted 1'], index =['actual 0','actual 1'] )
-#print('\n Confusion Matrix Weighted Tree \n',tree_wgt_confusion_matrix)
-#
-#tree_wgt_accuracy = metrics.accuracy_score(y_test, tree_wgt_yhat)
-#print( '\n Accuracy Weighted Tree: \n',tree_wgt_accuracy )
-#
-#tree_wgt_prob = tree_wgt.predict_proba(x_test)
-#tree_wgt_prob = [p[1] for p in tree_wgt_prob]
-#tree_wgt_auc = roc_auc_score(y_test, tree_wgt_prob)
-#print( '\n AUC Weighted Tree: \n', tree_wgt_auc )
-#
-#tree_wgt_f1 = f1_score(y_test, tree_wgt_yhat)
-#print('\n F_Score: \n', tree_f1)
-#################################################################################
-#
-#df2_yes = df2[df2["FLUDX_YES"] == 1].drop(['FLUDX_YES'],axis = 1 ).astype(float)
-#
-#df2_yes_corr = df2_yes.corr()               # defaults to Pearson
-#sns.heatmap(df2_yes.corr()) #, cmap='BuGn')
-##df2_yes_corr.sort_values(["FLUDX_YES"], ascending = False, inplace = True)
-##print("Find most important features relative to DV:", df2_yes_corr.FLUDX_YES)
-
-################################################################################
-
-#### Logistic Regression (statsmodel)
-#
-#
-#### Value Counts
-#for f in df2.columns:
-#    print(df2[f].value_counts())
-#
-#
-#traincols = ['FLUDX_YES','Gndr_F','Gndr_M','State_Other','State_VA',
-#             'Spclty_Family Practice','Spclty_Other','Spclty_Pediatrics',
-#             'Ins_AETNA','Ins_BCBS','Ins_CIGNA','Ins_Other','Ins_UNITED',
-#             'Zip_20132','Zip_20141','Zip_20147','Zip_20148','Zip_20164',
-#             'Zip_20165','Zip_20175','Zip_20176','Zip_20180','Zip_Other',
-#             'Age_Baby','Age_Child','Age_Adult','Age_Senior']
-#y = pd.DataFrame(df2['FLUDX_YES'].astype(float))
-#x = df2[traincols].astype(float)
-#
-#logit = Logit(y,x)
-#result = logit.fit()
-#print(result.summary())
-
-################################################################################
-
-
-
-
-
-
 
 
 
